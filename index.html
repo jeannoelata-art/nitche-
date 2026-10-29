@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Éditeur de texte sur image</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:Arial,sans-serif;margin:0;background:#f2f2f2;color:#222}
+  header{background:#1a73e8;color:#fff;padding:12px;text-align:center;font-size:18px}
+  main{padding:10px;max-width:900px;margin:auto}
+  .carte{background:#fff;border-radius:10px;padding:10px;margin-bottom:10px;box-shadow:0 1px 4px #0002}
+  canvas{width:100%;height:auto;display:block;touch-action:none;background:#ddd;border-radius:6px}
+  label{display:block;font-size:14px;margin:8px 0 3px}
+  input,select,textarea,button{font-size:16px;padding:8px;width:100%;border:1px solid #bbb;border-radius:6px}
+  input[type=color]{height:42px;padding:2px}
+  input[type=checkbox]{width:auto}
+  button{background:#1a73e8;color:#fff;border:0;margin-top:6px}
+  button.rouge{background:#d93025}
+  button.gris{background:#666}
+  .ligne{display:flex;gap:8px}
+  .ligne>div{flex:1}
+  .aide{font-size:13px;color:#555}
+</style>
+</head>
+<body>
+<header>Éditeur de texte sur image</header>
+<main>
+
+  <div class="carte">
+    <label>1. Choisir une image</label>
+    <input type="file" id="fichier" accept="image/*">
+    <p class="aide">2. Sur l'image, glisse le doigt pour entourer l'ancien texte. Ensuite tape le nouveau texte ci-dessous. Tape sur une zone pour la sélectionner ou la déplacer.</p>
+    <canvas id="cv" width="600" height="300"></canvas>
+  </div>
+
+  <div class="carte" id="panneau" style="display:none">
+    <label>Nouveau texte</label>
+    <textarea id="texte" rows="2"></textarea>
+
+    <div class="ligne">
+      <div>
+        <label>Police</label>
+        <select id="police">
+          <option>Arial</option><option>Times New Roman</option><option>Georgia</option>
+          <option>Verdana</option><option>Trebuchet MS</option><option>Courier New</option>
+          <option>Impact</option><option>Comic Sans MS</option>
+        </select>
+      </div>
+      <div>
+        <label>Taille (px)</label>
+        <input type="number" id="taille" min="4" max="1000">
+      </div>
+    </div>
+
+    <div class="ligne">
+      <div><label>Couleur du texte</label><input type="color" id="couleur"></div>
+      <div><label>Couleur du fond</label><input type="color" id="fond"></div>
+    </div>
+
+    <div class="ligne">
+      <div>
+        <label>Alignement</label>
+        <select id="align">
+          <option value="left">Gauche</option>
+          <option value="center">Centre</option>
+          <option value="right">Droite</option>
+        </select>
+      </div>
+      <div>
+        <label>Style</label>
+        <select id="style">
+          <option value="normal">Normal</option>
+          <option value="bold">Gras</option>
+          <option value="italic">Italique</option>
+          <option value="italic bold">Gras italique</option>
+        </select>
+      </div>
+    </div>
+
+    <label><input type="checkbox" id="ajuster"> Réduire le texte pour qu'il tienne dans la zone</label>
+
+    <button id="btnFondAuto">Retrouver la couleur du fond automatiquement</button>
+    <label>Ajouter une police (fichier .ttf ou .otf)</label>
+    <input type="file" id="fichierPolice" accept=".ttf,.otf,.woff,.woff2">
+    <button class="rouge" id="btnSuppr">Supprimer cette zone</button>
+  </div>
+
+  <div class="carte">
+    <button id="btnPng">Télécharger en PNG</button>
+    <button id="btnJpg">Télécharger en JPG</button>
+    <button id="btnPdf">Télécharger en PDF</button>
+    <button class="gris" id="btnJson">Copier les zones (JSON, pour PHP/Python)</button>
+  </div>
+
+</main>
+
+<script>
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const src = document.createElement('canvas');      // image d'origine, jamais modifiée
+const sctx = src.getContext('2d', { willReadFrequently: true });
+
+let img = null, blocs = [], sel = -1, action = null;
+const $ = id => document.getElementById(id);
+
+/* ---------- Chargement de l'image ---------- */
+$('fichier').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const im = new Image();
+  im.onload = () => {
+    img = im;
+    cv.width = src.width = im.naturalWidth;
+    cv.height = src.height = im.naturalHeight;
+    sctx.drawImage(im, 0, 0);
+    blocs = []; sel = -1;
+    majPanneau(); dessiner(true);
+  };
+  im.src = URL.createObjectURL(f);
+});
+
+/* ---------- Dessin ---------- */
+function ecrireBloc(b) {
+  ctx.fillStyle = b.fond;
+  ctx.fillRect(b.x, b.y, b.w, b.h);
+  const lignes = b.texte.split('\n');
+  let taille = b.taille;
+  const police = t => `${b.style} ${t}px "${b.police}"`;
+  ctx.font = police(taille);
+  if (b.ajuster) {
+    const largeurMax = b.w - 4;
+    const hauteurMax = b.h - 2;
+    while (taille > 4 && (
+      Math.max(...lignes.map(l => ctx.measureText(l).width)) > largeurMax ||
+      lignes.length * taille * 1.2 > hauteurMax)) {
+      taille -= 1; ctx.font = police(taille);
+    }
+  }
+  ctx.fillStyle = b.couleur;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = b.align;
+  const lh = taille * 1.2;
+  const x = b.align === 'left' ? b.x + 2 : b.align === 'right' ? b.x + b.w - 2 : b.x + b.w / 2;
+  const y0 = b.y + (b.h - lh * lignes.length) / 2 + lh / 2;
+  lignes.forEach((l, i) => ctx.fillText(l, x, y0 + i * lh));
+}
+
+function dessiner(avecInterface) {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  if (!img) return;
+  ctx.drawImage(src, 0, 0);
+  blocs.forEach(ecrireBloc);
+  if (avecInterface && sel >= 0) {
+    const b = blocs[sel];
+    ctx.save();
+    ctx.strokeStyle = '#1a73e8';
+    ctx.lineWidth = Math.max(2, cv.width / 300);
+    ctx.setLineDash([8, 6]);
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    ctx.restore();
+  }
+  if (avecInterface && action && action.type === 'creer') {
+    ctx.save();
+    ctx.strokeStyle = '#d93025';
+    ctx.lineWidth = Math.max(2, cv.width / 300);
+    ctx.strokeRect(action.x, action.y, action.w, action.h);
+    ctx.restore();
+  }
+}
+
+/* ---------- Couleur du fond (moyenne autour de la zone) ---------- */
+function couleurAutour(x, y, w, h) {
+  const pts = [], n = 12, m = 3;
+  for (let i = 0; i <= n; i++) {
+    const px = x + (w * i) / n, py = y + (h * i) / n;
+    pts.push([px, y - m], [px, y + h + m], [x - m, py], [x + w + m, py]);
+  }
+  let r = 0, g = 0, bl = 0, c = 0;
+  for (const [px, py] of pts) {
+    const cx = Math.min(src.width - 1, Math.max(0, Math.round(px)));
+    const cy = Math.min(src.height - 1, Math.max(0, Math.round(py)));
+    const d = sctx.getImageData(cx, cy, 1, 1).data;
+    r += d[0]; g += d[1]; bl += d[2]; c++;
+  }
+  const hex = v => Math.round(v / c).toString(16).padStart(2, '0');
+  return '#' + hex(r) + hex(g) + hex(bl);
+}
+
+/* ---------- Souris / doigt ---------- */
+function pos(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height };
+}
+function toucheBloc(p) {
+  for (let i = blocs.length - 1; i >= 0; i--) {
+    const b = blocs[i];
+    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return i;
+  }
+  return -1;
+}
+
+cv.addEventListener('pointerdown', e => {
+  if (!img) return;
+  cv.setPointerCapture(e.pointerId);
+  const p = pos(e);
+  const i = toucheBloc(p);
+  if (i >= 0) {
+    sel = i;
+    action = { type: 'deplacer', dx: p.x - blocs[i].x, dy: p.y - blocs[i].y };
+    majPanneau();
+  } else {
+    sel = -1;
+    action = { type: 'creer', x0: p.x, y0: p.y, x: p.x, y: p.y, w: 0, h: 0 };
+    majPanneau();
+  }
+  dessiner(true);
+});
+
+cv.addEventListener('pointermove', e => {
+  if (!action) return;
+  const p = pos(e);
+  if (action.type === 'deplacer') {
+    const b = blocs[sel];
+    b.x = p.x - action.dx; b.y = p.y - action.dy;
+  } else {
+    action.x = Math.min(action.x0, p.x); action.y = Math.min(action.y0, p.y);
+    action.w = Math.abs(p.x - action.x0); action.h = Math.abs(p.y - action.y0);
+  }
+  dessiner(true);
+});
+
+cv.addEventListener('pointerup', () => {
+  if (action && action.type === 'creer' && action.w > 8 && action.h > 8) {
+    const x = Math.round(action.x), y = Math.round(action.y);
+    const w = Math.round(action.w), h = Math.round(action.h);
+    blocs.push({
+      x, y, w, h,
+      fond: couleurAutour(x, y, w, h),
+      texte: 'Nouveau texte',
+      police: 'Arial',
+      taille: Math.max(8, Math.round(h * 0.7)),
+      couleur: '#000000',
+      align: 'left',
+      style: 'normal',
+      ajuster: false
+    });
+    sel = blocs.length - 1;
+  }
+  action = null;
+  majPanneau(); dessiner(true);
+});
+
+/* ---------- Panneau de réglages ---------- */
+function majPanneau() {
+  $('panneau').style.display = sel >= 0 ? 'block' : 'none';
+  if (sel < 0) return;
+  const b = blocs[sel];
+  $('texte').value = b.texte; $('police').value = b.police; $('taille').value = b.taille;
+  $('couleur').value = b.couleur; $('fond').value = b.fond;
+  $('align').value = b.align; $('style').value = b.style; $('ajuster').checked = b.ajuster;
+}
+function lier(id, cle, conv) {
+  $(id).addEventListener('input', e => {
+    if (sel < 0) return;
+    const el = e.target;
+    blocs[sel][cle] = conv ? conv(el) : el.value;
+    dessiner(true);
+  });
+}
+lier('texte', 'texte'); lier('police', 'police'); lier('couleur', 'couleur'); lier('fond', 'fond');
+lier('align', 'align'); lier('style', 'style');
+lier('taille', 'taille', el => Number(el.value) || 12);
+lier('ajuster', 'ajuster', el => el.checked);
+
+$('btnFondAuto').onclick = () => {
+  if (sel < 0) return;
+  const b = blocs[sel];
+  b.fond = couleurAutour(b.x, b.y, b.w, b.h);
+  majPanneau(); dessiner(true);
+};
+$('btnSuppr').onclick = () => {
+  if (sel < 0) return;
+  blocs.splice(sel, 1); sel = -1;
+  majPanneau(); dessiner(true);
+};
+
+/* ---------- Police personnalisée ---------- */
+$('fichierPolice').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const nom = f.name.replace(/\.[^.]+$/, '');
+  const police = new FontFace(nom, await f.arrayBuffer());
+  await police.load();
+  document.fonts.add(police);
+  const o = document.createElement('option');
+  o.textContent = nom;
+  $('police').appendChild(o);
+  if (sel >= 0) { blocs[sel].police = nom; majPanneau(); dessiner(true); }
+});
+
+/* ---------- Export ---------- */
+function telecharger(url, nom) {
+  const a = document.createElement('a');
+  a.href = url; a.download = nom;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function exporter(type, nom, qualite) {
+  if (!img) return alert("Choisis d'abord une image.");
+  dessiner(false);                                   // sans cadres bleus
+  telecharger(cv.toDataURL(type, qualite), nom);
+  dessiner(true);
+}
+$('btnPng').onclick = () => exporter('image/png', 'image-modifiee.png');
+$('btnJpg').onclick = () => exporter('image/jpeg', 'image-modifiee.jpg', 0.95);
+$('btnPdf').onclick = () => {
+  if (!img) return alert("Choisis d'abord une image.");
+  dessiner(false);
+  const { jsPDF } = window.jspdf;
+  const w = cv.width, h = cv.height;
+  const pdf = new jsPDF({ orientation: w > h ? 'l' : 'p', unit: 'px', format: [w, h], hotfixes: ['px_scaling'] });
+  pdf.addImage(cv.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, w, h);
+  pdf.save('image-modifiee.pdf');
+  dessiner(true);
+};
+$('btnJson').onclick = async () => {
+  const json = JSON.stringify(blocs.map(b => ({
+    x: b.x, y: b.y, w: b.w, h: b.h, fond: b.fond, texte: b.texte,
+    police: b.police, taille: b.taille, couleur: b.couleur, align: b.align
+  })), null, 2);
+  try { await navigator.clipboard.writeText(json); alert('Zones copiées.'); }
+  catch (err) { prompt('Copie ce texte :', json); }
+};
+</script>
+</body>
+</html>
