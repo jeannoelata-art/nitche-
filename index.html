@@ -2,153 +2,140 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>Éditeur de texte sur image</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-  *{box-sizing:border-box}
-  body{font-family:Arial,sans-serif;margin:0;background:#f2f2f2;color:#222}
-  header{background:#1a73e8;color:#fff;padding:12px;text-align:center;font-size:18px}
-  main{padding:10px;max-width:900px;margin:auto}
-  .carte{background:#fff;border-radius:10px;padding:10px;margin-bottom:10px;box-shadow:0 1px 4px #0002}
-  canvas{width:100%;height:auto;display:block;touch-action:none;background:#ddd;border-radius:6px}
-  label{display:block;font-size:14px;margin:8px 0 3px}
-  input,select,textarea,button{font-size:16px;padding:8px;width:100%;border:1px solid #bbb;border-radius:6px}
-  input[type=color]{height:42px;padding:2px}
-  input[type=checkbox]{width:auto}
-  button{background:#1a73e8;color:#fff;border:0;margin-top:6px}
-  button.rouge{background:#d93025}
-  button.gris{background:#666}
-  .ligne{display:flex;gap:8px}
-  .ligne>div{flex:1}
-  .aide{font-size:13px;color:#555}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0;font-family:Arial,sans-serif;background:#222;color:#222}
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+  header,#barre{display:flex;gap:6px;padding:6px;background:#1a73e8;overflow-x:auto;flex:none;align-items:center}
+  #barre{background:#fff;border-top:1px solid #ccc;display:none}
+  button,select,input,.btn{font-size:16px;min-height:42px;border:0;border-radius:8px;padding:0 12px;background:#fff;color:#222;flex:none}
+  header button,header .btn{background:#fff3;color:#fff;display:flex;align-items:center}
+  button.on{background:#1a73e8;color:#fff}
+  #barre button,#barre select,#barre input{background:#eee}
+  #barre #couleur{width:46px;padding:2px}
+  #taille{width:62px;text-align:center}
+  #astuce{flex:none;background:#333;color:#ddd;font-size:13px;padding:5px 8px;text-align:center}
+  #stage{flex:1;overflow:auto;display:flex;background:#555;min-height:0}
+  #scene{margin:auto;flex:none;position:relative}
+  canvas{display:block;background:#888}
+  #editeur{position:absolute;display:none;margin:0;border:0;outline:2px dashed #1a73e8;background:transparent;resize:none;overflow:hidden;white-space:pre;transform-origin:0 0}
+  dialog{border:0;border-radius:12px;width:min(94vw,460px);max-height:90vh;padding:14px}
+  dialog::backdrop{background:#0008}
+  dialog label{display:block;font-size:14px;margin:10px 0 3px}
+  dialog input,dialog select,dialog button{width:100%;background:#eee;margin-top:4px}
+  dialog .ok{background:#1a73e8;color:#fff}
+  dialog .rouge{background:#d93025;color:#fff}
+  .ligne{display:flex;gap:6px}.ligne>*{flex:1}
 </style>
 </head>
 <body>
-<header>Éditeur de texte sur image</header>
-<main>
-
-  <div class="carte">
-    <label>1. Choisir une image</label>
-    <input type="file" id="fichier" accept="image/*">
-    <p class="aide">2. Glisse le doigt pour entourer l'ancien texte, en laissant un peu de marge autour (le fond propre autour sert à reconstruire l'arrière-plan). Les réglages sont détectés automatiquement : tu n'as plus qu'à écrire le nouveau texte. Tape sur une zone pour la modifier.</p>
-    <canvas id="cv" width="600" height="300"></canvas>
+<div id="app">
+  <header>
+    <label class="btn" for="fichier">📁 Image</label>
+    <input type="file" id="fichier" accept="image/*" hidden>
+    <button id="btnAnnuler">↶ Annuler</button>
+    <button id="btnMain">✋ Défiler</button>
+    <button id="btnMoins">−</button><button id="btnFit">Ajuster</button><button id="btnPlus">+</button>
+    <button id="btnExport">⬇ Exporter</button>
+  </header>
+  <div id="astuce">Ouvre une image pour commencer.</div>
+  <div id="stage"><div id="scene"><canvas id="cv" width="10" height="10"></canvas>
+    <textarea id="editeur" wrap="off" spellcheck="false" autocapitalize="off"></textarea></div></div>
+  <div id="barre">
+    <button id="btnEcrire">✏️ Écrire</button>
+    <select id="police">
+      <option>Arial</option><option>Times New Roman</option><option>Georgia</option><option>Verdana</option>
+      <option>Trebuchet MS</option><option>Courier New</option><option>Impact</option><option>Comic Sans MS</option>
+    </select>
+    <button id="tMoins">A−</button><input type="number" id="taille" min="4" max="1000"><button id="tPlus">A+</button>
+    <input type="color" id="couleur">
+    <button id="bGras"><b>G</b></button><button id="bItal"><i>I</i></button><button id="bAlign">⬅</button>
+    <button id="btnReglages">⚙ Réglages</button>
   </div>
+</div>
 
-  <div class="carte" id="panneau" style="display:none">
-    <label>Nouveau texte</label>
-    <textarea id="texte" rows="2"></textarea>
-
-    <div class="ligne">
-      <div>
-        <label>Police</label>
-        <select id="police">
-          <option>Arial</option><option>Times New Roman</option><option>Georgia</option>
-          <option>Verdana</option><option>Trebuchet MS</option><option>Courier New</option>
-          <option>Impact</option><option>Comic Sans MS</option>
-        </select>
-      </div>
-      <div>
-        <label>Taille (px)</label>
-        <input type="number" id="taille" min="4" max="1000">
-      </div>
-    </div>
-
-    <div class="ligne">
-      <div><label>Couleur du texte</label><input type="color" id="couleur"></div>
-      <div>
-        <label>Fond</label>
-        <select id="mode">
-          <option value="auto">Reconstruit (dégradé)</option>
-          <option value="uni">Couleur unie</option>
-        </select>
-      </div>
-    </div>
-    <div id="blocFond"><label>Couleur unie du fond</label><input type="color" id="fond"></div>
-
-    <div class="ligne">
-      <div>
-        <label>Alignement</label>
-        <select id="align">
-          <option value="left">Gauche</option>
-          <option value="center">Centre</option>
-          <option value="right">Droite</option>
-        </select>
-      </div>
-      <div>
-        <label>Style</label>
-        <select id="style">
-          <option value="normal">Normal</option>
-          <option value="bold">Gras</option>
-          <option value="italic">Italique</option>
-          <option value="italic bold">Gras italique</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="ligne">
-      <div><label>Décalage horizontal (px)</label><input type="number" id="dx"></div>
-      <div><label>Décalage vertical (px)</label><input type="number" id="dy"></div>
-      <div><label>Espacement lettres</label><input type="number" id="espacement" step="0.5"></div>
-    </div>
-
-    <label><input type="checkbox" id="ajuster"> Réduire le texte pour qu'il tienne dans la zone</label>
-
-    <button id="btnAuto">Ré-analyser la zone (fond, couleur, taille)</button>
-    <label>Ajouter une police (fichier .ttf ou .otf)</label>
-    <input type="file" id="fichierPolice" accept=".ttf,.otf,.woff,.woff2">
-    <button class="rouge" id="btnSuppr">Supprimer cette zone</button>
+<dialog id="dReglages">
+  <div class="ligne">
+    <div><label>Fond</label><select id="mode"><option value="auto">Reconstruit</option><option value="uni">Couleur unie</option></select></div>
+    <div><label>Couleur unie</label><input type="color" id="fond"></div>
   </div>
-
-  <div class="carte">
-    <button id="btnPng">Télécharger en PNG</button>
-    <button id="btnJpg">Télécharger en JPG</button>
-    <button id="btnPdf">Télécharger en PDF</button>
-    <button class="gris" id="btnJson">Copier les zones (JSON, pour PHP/Python)</button>
+  <div class="ligne">
+    <button id="pipT">💧 Pipette texte</button><button id="pipF">💧 Pipette fond</button>
   </div>
+  <label>Position du texte (flèches = 1 px)</label>
+  <div class="ligne"><button id="nG">◀</button><button id="nH">▲</button><button id="nB">▼</button><button id="nD">▶</button></div>
+  <div class="ligne">
+    <div><label>Décalage X</label><input type="number" id="dx"></div>
+    <div><label>Décalage Y</label><input type="number" id="dy"></div>
+    <div><label>Espacement</label><input type="number" id="espacement" step="0.5"></div>
+  </div>
+  <label><input type="checkbox" id="ajuster" style="width:auto"> Réduire le texte pour qu'il tienne dans la zone</label>
+  <button id="btnCaler">Caler la largeur sur l'ancien texte</button>
+  <button id="btnAuto">Ré-analyser la zone (fond, couleur, taille)</button>
+  <label>Ajouter une police (.ttf, .otf)</label><input type="file" id="fichierPolice" accept=".ttf,.otf,.woff,.woff2">
+  <button class="rouge" id="btnSuppr">Supprimer cette zone</button>
+  <button class="ok" id="fermerR">Fermer</button>
+</dialog>
 
-</main>
+<dialog id="dExport">
+  <button class="ok" id="btnPng">Télécharger en PNG</button>
+  <button class="ok" id="btnJpg">Télécharger en JPG</button>
+  <button class="ok" id="btnPdf">Télécharger en PDF</button>
+  <button id="btnJson">Copier les zones (JSON pour PHP/Python)</button>
+  <button id="fermerE">Fermer</button>
+</dialog>
 
 <script>
-const cv = document.getElementById('cv');
-const ctx = cv.getContext('2d');
-const src = document.createElement('canvas');      // image d'origine, jamais modifiée
-const sctx = src.getContext('2d', { willReadFrequently: true });
 const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+const src = document.createElement('canvas');
+const sctx = src.getContext('2d', { willReadFrequently: true });
+const ed = $('editeur');
+const PAD = 2, BANDE = 4;
+let img = null, blocs = [], sel = -1, action = null, outil = 'zone', zoom = 1, histo = [], aFocaliser = false;
+const B = () => blocs[sel];
 
-let img = null, blocs = [], sel = -1, action = null;
-const PAD = 2;      // on efface un peu plus large que la zone dessinée (bords adoucis du texte)
-const BANDE = 4;    // épaisseur de fond lue autour de la zone
+function astuce(t) { $('astuce').textContent = t; }
 
-/* ---------- Chargement de l'image ---------- */
+/* ---------- Image ---------- */
 $('fichier').addEventListener('change', e => {
-  const f = e.target.files[0];
-  if (!f) return;
+  const f = e.target.files[0]; if (!f) return;
   const im = new Image();
   im.onload = () => {
-    img = im;
-    cv.width = src.width = im.naturalWidth;
-    cv.height = src.height = im.naturalHeight;
-    sctx.drawImage(im, 0, 0);
-    blocs = []; sel = -1;
-    majPanneau(); dessiner(true);
+    img = im; cv.width = src.width = im.naturalWidth; cv.height = src.height = im.naturalHeight;
+    sctx.drawImage(im, 0, 0); blocs = []; sel = -1; histo = []; zoom = 1;
+    majZoom(); rafraichir();
+    astuce("Entoure l'ancien texte avec le doigt (laisse un peu de marge).");
   };
   im.src = URL.createObjectURL(f);
 });
 
-/* ---------- Reconstruction du fond ----------
-   On lit les pixels juste autour de la zone (médiane, donc peu sensible
-   à un reste de texte voisin), puis on les étire à l'intérieur :
-   dégradé horizontal + dégradé vertical, moyennés. */
-function mediane(liste) {
-  const res = [0, 0, 0];
-  for (let c = 0; c < 3; c++) {
-    const v = liste.map(p => p[c]).sort((a, b) => a - b);
-    res[c] = v[Math.floor(v.length / 2)];
-  }
-  return res;
+function majZoom() {
+  if (!img) return;
+  const fit = ($('stage').clientWidth - 8) / cv.width;
+  cv.style.width = (cv.width * fit * zoom) + 'px'; cv.style.height = 'auto';
+  placerEditeur();
+}
+window.addEventListener('resize', majZoom);
+$('btnPlus').onclick = () => { zoom = Math.min(8, zoom * 1.4); majZoom(); };
+$('btnMoins').onclick = () => { zoom = Math.max(0.3, zoom / 1.4); majZoom(); };
+$('btnFit').onclick = () => { zoom = 1; majZoom(); };
+$('btnMain').onclick = () => { outil = outil === 'main' ? 'zone' : 'main'; majOutil(); };
+function majOutil() {
+  $('btnMain').classList.toggle('on', outil === 'main');
+  cv.style.touchAction = outil === 'main' ? 'auto' : 'none';
+  if (outil === 'main') astuce("Mode défilement : fais glisser l'image. Retouche ✋ pour revenir au dessin.");
+  else if (outil === 'zone') astuce("Entoure l'ancien texte avec le doigt, ou touche une zone pour la modifier.");
+  else astuce("Pipette : touche l'image à l'endroit de la couleur à copier.");
 }
 
+/* ---------- Fond reconstruit ---------- */
+function mediane(liste) {
+  return [0, 1, 2].map(c => liste.map(p => p[c]).sort((a, b) => a - b)[Math.floor(liste.length / 2)]);
+}
 function fondDegrade(x, y, w, h) {
   const X = Math.max(0, Math.round(x) - PAD), Y = Math.max(0, Math.round(y) - PAD);
   const X2 = Math.min(src.width, Math.round(x + w) + PAD), Y2 = Math.min(src.height, Math.round(y + h) + PAD);
@@ -157,15 +144,14 @@ function fondDegrade(x, y, w, h) {
   const rw = Math.min(src.width, X2 + BANDE) - rx, rh = Math.min(src.height, Y2 + BANDE) - ry;
   const d = sctx.getImageData(rx, ry, rw, rh).data;
   const px = (ix, iy) => { const k = ((iy - ry) * rw + (ix - rx)) * 4; return [d[k], d[k + 1], d[k + 2]]; };
-
-  const T = [], B = [], L = [], R = [];
+  const T = [], Bo = [], L = [], R = [];
   for (let i = 0; i < W; i++) {
     const ix = X + i, t = [], b = [];
     for (let k = 1; k <= BANDE; k++) {
       if (Y - k >= 0) t.push(px(ix, Y - k));
       if (Y2 - 1 + k < src.height) b.push(px(ix, Y2 - 1 + k));
     }
-    T.push(t.length ? mediane(t) : null); B.push(b.length ? mediane(b) : null);
+    T.push(t.length ? mediane(t) : null); Bo.push(b.length ? mediane(b) : null);
   }
   for (let j = 0; j < H; j++) {
     const iy = Y + j, l = [], r = [];
@@ -175,70 +161,55 @@ function fondDegrade(x, y, w, h) {
     }
     L.push(l.length ? mediane(l) : null); R.push(r.length ? mediane(r) : null);
   }
-  // Bords manquants (zone au bord de l'image) : on utilise le bord opposé
-  const tout = [...T, ...B, ...L, ...R].filter(Boolean);
+  const tout = [...T, ...Bo, ...L, ...R].filter(Boolean);
   const moy = tout.length ? mediane(tout) : [255, 255, 255];
-  for (let i = 0; i < W; i++) { T[i] = T[i] || B[i] || moy; B[i] = B[i] || T[i]; }
+  for (let i = 0; i < W; i++) { T[i] = T[i] || Bo[i] || moy; Bo[i] = Bo[i] || T[i]; }
   for (let j = 0; j < H; j++) { L[j] = L[j] || R[j] || moy; R[j] = R[j] || L[j]; }
-
   const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const cx = c.getContext('2d');
-  const out = cx.createImageData(W, H), o = out.data;
+  const cx = c.getContext('2d'), out = cx.createImageData(W, H), o = out.data;
   for (let j = 0; j < H; j++) {
     const v = H > 1 ? j / (H - 1) : 0;
     for (let i = 0; i < W; i++) {
       const u = W > 1 ? i / (W - 1) : 0, k = (j * W + i) * 4;
-      for (let ch = 0; ch < 3; ch++) {
-        const hz = L[j][ch] * (1 - u) + R[j][ch] * u;
-        const vt = T[i][ch] * (1 - v) + B[i][ch] * v;
-        o[k + ch] = (hz + vt) / 2;
-      }
+      for (let ch = 0; ch < 3; ch++)
+        o[k + ch] = ((L[j][ch] * (1 - u) + R[j][ch] * u) + (T[i][ch] * (1 - v) + Bo[i][ch] * v)) / 2;
       o[k + 3] = 255;
     }
   }
   cx.putImageData(out, 0, 0);
-  const centre = (Math.floor(H / 2) * W + Math.floor(W / 2)) * 4;
-  const hex = v => Math.round(v).toString(16).padStart(2, '0');
-  return { canvas: c, data: o, X, Y, moyenne: '#' + hex(o[centre]) + hex(o[centre + 1]) + hex(o[centre + 2]) };
+  const m = (Math.floor(H / 2) * W + Math.floor(W / 2)) * 4;
+  return { canvas: c, data: o, X, Y, moyenne: hex3(o[m], o[m + 1], o[m + 2]) };
+}
+const hex3 = (r, g, b) => '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+function assurerFond(b) {
+  if (!b.fillCanvas) { const f = fondDegrade(b.x, b.y, b.w, b.h); b.fillCanvas = f.canvas; b.fillX = f.X; b.fillY = f.Y; }
 }
 
-/* ---------- Analyse de l'ancien texte ----------
-   On compare l'image d'origine au fond reconstruit : ce qui diffère
-   est l'ancien texte. On en déduit couleur, taille et position. */
+/* ---------- Analyse de l'ancien texte ---------- */
 function analyser(f) {
   const W = f.canvas.width, H = f.canvas.height;
-  const o = sctx.getImageData(f.X, f.Y, W, H).data, g = f.data;
-  const dist = new Float32Array(W * H);
+  const o = sctx.getImageData(f.X, f.Y, W, H).data, g = f.data, dist = new Float32Array(W * H);
   let max = 0;
   for (let k = 0; k < W * H; k++) {
-    const q = k * 4;
-    const dd = Math.abs(o[q] - g[q]) + Math.abs(o[q + 1] - g[q + 1]) + Math.abs(o[q + 2] - g[q + 2]);
+    const q = k * 4, dd = Math.abs(o[q] - g[q]) + Math.abs(o[q + 1] - g[q + 1]) + Math.abs(o[q + 2] - g[q + 2]);
     dist[k] = dd; if (dd > max) max = dd;
   }
-  if (max < 60) return null;                        // aucun texte détecté
+  if (max < 60) return null;
   const seuil = Math.max(45, max * 0.45);
-  let x0 = W, x1 = -1, y0 = H, y1 = -1;
+  let x0 = W, x1 = -1, y0 = H, y1 = -1, r = 0, gg = 0, b = 0, n = 0;
   for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    if (dist[j * W + i] >= seuil) {
-      if (i < x0) x0 = i; if (i > x1) x1 = i; if (j < y0) y0 = j; if (j > y1) y1 = j;
-    }
+    const k = j * W + i;
+    if (dist[k] >= seuil) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (j < y0) y0 = j; if (j > y1) y1 = j; }
+    if (dist[k] >= max * 0.8) { r += o[k * 4]; gg += o[k * 4 + 1]; b += o[k * 4 + 2]; n++; }
   }
-  let r = 0, gg = 0, b = 0, n = 0;
-  for (let k = 0; k < W * H; k++) {
-    if (dist[k] >= max * 0.8) { const q = k * 4; r += o[q]; gg += o[q + 1]; b += o[q + 2]; n++; }
-  }
-  const hex = v => Math.round(v / n).toString(16).padStart(2, '0');
-  return { couleur: '#' + hex(r) + hex(gg) + hex(b), x0: f.X + x0, x1: f.X + x1, y0: f.Y + y0, y1: f.Y + y1 };
+  return { couleur: hex3(r / n, gg / n, b / n), x0: f.X + x0, x1: f.X + x1, y0: f.Y + y0, y1: f.Y + y1 };
 }
-
 function reglagesAuto(b) {
   const f = fondDegrade(b.x, b.y, b.w, b.h);
   b.fillCanvas = f.canvas; b.fillX = f.X; b.fillY = f.Y; b.fond = f.moyenne;
-  const a = analyser(f);
-  if (!a) return;
-  const inkH = a.y1 - a.y0 + 1;
-  b.taille = Math.max(6, Math.round(inkH / 0.9));
-  b.couleur = a.couleur;
+  const a = analyser(f); if (!a) return;
+  b.taille = Math.max(6, Math.round((a.y1 - a.y0 + 1) / 0.9));
+  b.couleur = a.couleur; b.inkW = a.x1 - a.x0 + 1;
   const gauche = a.x0 - b.x, droite = (b.x + b.w) - a.x1;
   if (Math.abs(gauche - droite) < 0.1 * b.w) { b.align = 'center'; b.dx = Math.round((a.x0 + a.x1) / 2 - (b.x + b.w / 2)); }
   else if (gauche < droite) { b.align = 'left'; b.dx = Math.round(gauche - 2); }
@@ -247,57 +218,123 @@ function reglagesAuto(b) {
 }
 
 /* ---------- Dessin ---------- */
-function ecrireBloc(b) {
+const police = (b, t) => `${b.style} ${t}px "${b.police}"`;
+function tailleAjustee(b) {
+  let t = b.taille; if (!b.ajuster) return t;
+  const l = b.texte.split('\n');
+  ctx.font = police(b, t);
+  while (t > 4 && (Math.max(...l.map(s => ctx.measureText(s).width)) > b.w - 4 || l.length * t * 1.2 > b.h - 2)) {
+    t--; ctx.font = police(b, t);
+  }
+  return t;
+}
+function ecrireBloc(b, sansTexte) {
+  assurerFond(b);
   if (b.mode === 'auto') ctx.drawImage(b.fillCanvas, b.fillX, b.fillY);
   else { ctx.fillStyle = b.fond; ctx.fillRect(b.fillX, b.fillY, b.fillCanvas.width, b.fillCanvas.height); }
-
-  const lignes = b.texte.split('\n');
-  let taille = b.taille;
-  const police = t => `${b.style} ${t}px "${b.police}"`;
-  const lettres = 'letterSpacing' in ctx;
-  if (lettres) ctx.letterSpacing = (b.espacement || 0) + 'px';
-  ctx.font = police(taille);
-  if (b.ajuster) {
-    while (taille > 4 && (
-      Math.max(...lignes.map(l => ctx.measureText(l).width)) > b.w - 4 ||
-      lignes.length * taille * 1.2 > b.h - 2)) {
-      taille -= 1; ctx.font = police(taille);
-    }
-  }
-  ctx.fillStyle = b.couleur;
-  ctx.textBaseline = 'middle';
-  ctx.textAlign = b.align;
+  if (sansTexte) return;
+  const lignes = b.texte.split('\n'), taille = tailleAjustee(b), ls = 'letterSpacing' in ctx;
+  if (ls) ctx.letterSpacing = (b.espacement || 0) + 'px';
+  ctx.font = police(b, taille); ctx.fillStyle = b.couleur; ctx.textBaseline = 'middle'; ctx.textAlign = b.align;
   const lh = taille * 1.2;
   const x = (b.align === 'left' ? b.x + 2 : b.align === 'right' ? b.x + b.w - 2 : b.x + b.w / 2) + b.dx;
-  const y0 = b.y + b.h / 2 + b.dy - (lh * (lignes.length - 1)) / 2;
+  const y0 = b.y + b.h / 2 + b.dy - lh * (lignes.length - 1) / 2;
   lignes.forEach((l, i) => ctx.fillText(l, x, y0 + i * lh));
-  if (lettres) ctx.letterSpacing = '0px';
+  if (ls) ctx.letterSpacing = '0px';
 }
-
-function dessiner(avecInterface) {
+function dessiner(ui) {
   ctx.clearRect(0, 0, cv.width, cv.height);
   if (!img) return;
   ctx.drawImage(src, 0, 0);
-  blocs.forEach(ecrireBloc);
-  if (avecInterface && sel >= 0) {
-    const b = blocs[sel];
-    ctx.save();
-    ctx.strokeStyle = '#1a73e8';
-    ctx.lineWidth = Math.max(2, cv.width / 300);
-    ctx.setLineDash([8, 6]);
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
-    ctx.restore();
-  }
-  if (avecInterface && action && action.type === 'creer') {
-    ctx.save();
-    ctx.strokeStyle = '#d93025';
-    ctx.lineWidth = Math.max(2, cv.width / 300);
-    ctx.strokeRect(action.x, action.y, action.w, action.h);
-    ctx.restore();
+  blocs.forEach((b, i) => ecrireBloc(b, ui && i === sel));
+  if (ui && action) {
+    ctx.save(); ctx.strokeStyle = '#d93025'; ctx.lineWidth = Math.max(2, cv.width / 300);
+    ctx.strokeRect(action.x, action.y, action.w, action.h); ctx.restore();
   }
 }
 
-/* ---------- Souris / doigt ---------- */
+/* ---------- Zone de texte posée sur l'image ---------- */
+function placerEditeur() {
+  if (sel < 0 || !img) { ed.style.display = 'none'; return; }
+  const b = B(), k = cv.clientWidth / cv.width, t = tailleAjustee(b), lh = t * 1.2, n = b.texte.split('\n').length;
+  if (document.activeElement !== ed) ed.value = b.texte;
+  Object.assign(ed.style, {
+    display: 'block', left: b.x * k + 'px', top: b.y * k + 'px', width: b.w * k + 'px', height: b.h * k + 'px',
+    font: police(b, t * k), lineHeight: lh * k + 'px', color: b.couleur, caretColor: b.couleur,
+    textAlign: b.align, letterSpacing: (b.espacement || 0) * k + 'px',
+    padding: `${Math.max(0, (b.h - lh * n) / 2) * k}px ${2 * k}px 0`,
+    transform: `translate(${b.dx * k}px,${b.dy * k}px)`
+  });
+}
+ed.addEventListener('input', () => { B().texte = ed.value; placerEditeur(); });
+$('btnEcrire').onclick = () => { if (sel >= 0) { ed.focus(); ed.select(); } };
+
+/* ---------- Barre d'outils ---------- */
+function rafraichir() { majBarre(); placerEditeur(); dessiner(true); }
+function majBarre() {
+  $('barre').style.display = sel >= 0 ? 'flex' : 'none';
+  if (sel < 0) return;
+  const b = B();
+  $('police').value = b.police; $('taille').value = b.taille; $('couleur').value = b.couleur;
+  $('bGras').classList.toggle('on', b.style.includes('bold'));
+  $('bItal').classList.toggle('on', b.style.includes('italic'));
+  $('bAlign').textContent = { left: '⬅', center: '↔', right: '➡' }[b.align];
+}
+function regler(cle, val) { if (sel < 0) return; B()[cle] = val; rafraichir(); }
+$('police').onchange = e => regler('police', e.target.value);
+$('taille').oninput = e => regler('taille', Number(e.target.value) || 12);
+$('tMoins').onclick = () => sel >= 0 && regler('taille', Math.max(4, B().taille - 1));
+$('tPlus').onclick = () => sel >= 0 && regler('taille', B().taille + 1);
+$('couleur').oninput = e => regler('couleur', e.target.value);
+function style(gras, ital) { return ((ital ? 'italic ' : '') + (gras ? 'bold' : '')).trim() || 'normal'; }
+$('bGras').onclick = () => sel >= 0 && regler('style', style(!B().style.includes('bold'), B().style.includes('italic')));
+$('bItal').onclick = () => sel >= 0 && regler('style', style(B().style.includes('bold'), !B().style.includes('italic')));
+$('bAlign').onclick = () => sel >= 0 && regler('align', { left: 'center', center: 'right', right: 'left' }[B().align]);
+
+/* ---------- Réglages avancés ---------- */
+$('btnReglages').onclick = () => {
+  const b = B();
+  $('mode').value = b.mode; $('fond').value = b.fond; $('dx').value = b.dx; $('dy').value = b.dy;
+  $('espacement').value = b.espacement; $('ajuster').checked = b.ajuster;
+  $('dReglages').showModal();
+};
+$('fermerR').onclick = () => $('dReglages').close();
+$('mode').onchange = e => regler('mode', e.target.value);
+$('fond').oninput = e => { regler('fond', e.target.value); regler('mode', 'uni'); $('mode').value = 'uni'; };
+const num = id => e => { regler(id, Number(e.target.value) || 0); };
+$('dx').oninput = num('dx'); $('dy').oninput = num('dy'); $('espacement').oninput = num('espacement');
+$('ajuster').onchange = e => regler('ajuster', e.target.checked);
+const pousser = (cle, d) => () => { regler(cle, B()[cle] + d); $(cle).value = B()[cle]; };
+$('nG').onclick = pousser('dx', -1); $('nD').onclick = pousser('dx', 1);
+$('nH').onclick = pousser('dy', -1); $('nB').onclick = pousser('dy', 1);
+$('btnCaler').onclick = () => {
+  const b = B(); if (!b.inkW) return alert("Ancien texte non détecté : règle la taille à la main.");
+  ctx.font = police(b, b.taille);
+  const l = Math.max(...b.texte.split('\n').map(s => ctx.measureText(s).width));
+  if (l > 0) regler('taille', Math.max(4, Math.round(b.taille * b.inkW / l)));
+  $('dReglages').close();
+};
+$('btnAuto').onclick = () => { pousserHisto(); reglagesAuto(B()); rafraichir(); $('dReglages').close(); };
+$('btnSuppr').onclick = () => { pousserHisto(); blocs.splice(sel, 1); sel = -1; rafraichir(); $('dReglages').close(); };
+$('pipT').onclick = () => { outil = 'pipT'; majOutil(); $('dReglages').close(); };
+$('pipF').onclick = () => { outil = 'pipF'; majOutil(); $('dReglages').close(); };
+$('fichierPolice').addEventListener('change', async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const nom = f.name.replace(/\.[^.]+$/, ''), p = new FontFace(nom, await f.arrayBuffer());
+  await p.load(); document.fonts.add(p);
+  const o = document.createElement('option'); o.textContent = nom; $('police').appendChild(o);
+  regler('police', nom);
+});
+
+/* ---------- Annuler ---------- */
+const snapshot = () => JSON.stringify(blocs, (k, v) => (k === 'fillCanvas' ? undefined : v));
+function pousserHisto() { histo.push(snapshot()); if (histo.length > 30) histo.shift(); }
+$('btnAnnuler').onclick = () => {
+  if (!histo.length) return;
+  blocs = JSON.parse(histo.pop()); sel = -1; rafraichir();
+};
+
+/* ---------- Doigt / souris sur l'image ---------- */
 function pos(e) {
   const r = cv.getBoundingClientRect();
   return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height };
@@ -309,17 +346,20 @@ function toucheBloc(p) {
   }
   return -1;
 }
-
 cv.addEventListener('pointerdown', e => {
-  if (!img) return;
-  cv.setPointerCapture(e.pointerId);
+  if (!img || outil === 'main') return;
   const p = pos(e);
+  if (outil === 'pipT' || outil === 'pipF') {
+    const d = sctx.getImageData(Math.floor(p.x), Math.floor(p.y), 1, 1).data, c = hex3(d[0], d[1], d[2]);
+    if (sel >= 0) { outil === 'pipT' ? regler('couleur', c) : (regler('fond', c), regler('mode', 'uni')); }
+    outil = 'zone'; majOutil(); return;
+  }
+  cv.setPointerCapture(e.pointerId);
   const i = toucheBloc(p);
-  if (i >= 0) { sel = i; action = null; }
-  else { sel = -1; action = { type: 'creer', x0: p.x, y0: p.y, x: p.x, y: p.y, w: 0, h: 0 }; }
-  majPanneau(); dessiner(true);
+  if (i >= 0) { sel = i; action = null; aFocaliser = true; }
+  else { sel = -1; action = { x0: p.x, y0: p.y, x: p.x, y: p.y, w: 0, h: 0 }; }
+  rafraichir();
 });
-
 cv.addEventListener('pointermove', e => {
   if (!action) return;
   const p = pos(e);
@@ -327,86 +367,31 @@ cv.addEventListener('pointermove', e => {
   action.w = Math.abs(p.x - action.x0); action.h = Math.abs(p.y - action.y0);
   dessiner(true);
 });
-
 cv.addEventListener('pointerup', () => {
   if (action && action.w > 8 && action.h > 8) {
+    pousserHisto();
     const b = {
       x: Math.round(action.x), y: Math.round(action.y), w: Math.round(action.w), h: Math.round(action.h),
-      mode: 'auto', fond: '#ffffff', texte: 'Nouveau texte', police: 'Arial',
-      taille: 20, couleur: '#000000', align: 'left', style: 'normal',
-      ajuster: false, dx: 0, dy: 0, espacement: 0
+      mode: 'auto', fond: '#ffffff', texte: '', police: 'Arial', taille: 20, couleur: '#000000',
+      align: 'left', style: 'normal', ajuster: false, dx: 0, dy: 0, espacement: 0
     };
-    reglagesAuto(b);
-    blocs.push(b);
-    sel = blocs.length - 1;
+    reglagesAuto(b); blocs.push(b); sel = blocs.length - 1; aFocaliser = true;
+    astuce('Écris le nouveau texte directement dans la zone.');
   }
-  action = null;
-  majPanneau(); dessiner(true);
+  action = null; rafraichir();
+  if (aFocaliser && sel >= 0) { ed.focus(); aFocaliser = false; }
 });
 
-/* ---------- Panneau de réglages ---------- */
-function majPanneau() {
-  $('panneau').style.display = sel >= 0 ? 'block' : 'none';
-  if (sel < 0) return;
-  const b = blocs[sel];
-  $('texte').value = b.texte; $('police').value = b.police; $('taille').value = b.taille;
-  $('couleur').value = b.couleur; $('fond').value = b.fond; $('mode').value = b.mode;
-  $('align').value = b.align; $('style').value = b.style; $('ajuster').checked = b.ajuster;
-  $('dx').value = b.dx; $('dy').value = b.dy; $('espacement').value = b.espacement;
-  $('blocFond').style.display = b.mode === 'uni' ? 'block' : 'none';
-}
-function lier(id, cle, conv) {
-  $(id).addEventListener('input', e => {
-    if (sel < 0) return;
-    const el = e.target;
-    blocs[sel][cle] = conv ? conv(el) : el.value;
-    if (id === 'mode') majPanneau();
-    dessiner(true);
-  });
-}
-const nombre = el => Number(el.value) || 0;
-lier('texte', 'texte'); lier('police', 'police'); lier('couleur', 'couleur'); lier('fond', 'fond');
-lier('mode', 'mode'); lier('align', 'align'); lier('style', 'style');
-lier('taille', 'taille', el => Number(el.value) || 12);
-lier('dx', 'dx', nombre); lier('dy', 'dy', nombre); lier('espacement', 'espacement', nombre);
-lier('ajuster', 'ajuster', el => el.checked);
-
-$('btnAuto').onclick = () => {
-  if (sel < 0) return;
-  reglagesAuto(blocs[sel]);
-  majPanneau(); dessiner(true);
-};
-$('btnSuppr').onclick = () => {
-  if (sel < 0) return;
-  blocs.splice(sel, 1); sel = -1;
-  majPanneau(); dessiner(true);
-};
-
-/* ---------- Police personnalisée ---------- */
-$('fichierPolice').addEventListener('change', async e => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const nom = f.name.replace(/\.[^.]+$/, '');
-  const police = new FontFace(nom, await f.arrayBuffer());
-  await police.load();
-  document.fonts.add(police);
-  const o = document.createElement('option');
-  o.textContent = nom;
-  $('police').appendChild(o);
-  if (sel >= 0) { blocs[sel].police = nom; majPanneau(); dessiner(true); }
-});
-
-/* ---------- Export (taille d'origine de l'image) ---------- */
+/* ---------- Export ---------- */
+$('btnExport').onclick = () => $('dExport').showModal();
+$('fermerE').onclick = () => $('dExport').close();
 function telecharger(url, nom) {
-  const a = document.createElement('a');
-  a.href = url; a.download = nom;
+  const a = document.createElement('a'); a.href = url; a.download = nom;
   document.body.appendChild(a); a.click(); a.remove();
 }
-function exporter(type, nom, qualite) {
+function exporter(type, nom, q) {
   if (!img) return alert("Choisis d'abord une image.");
-  dessiner(false);                                   // sans cadres bleus
-  telecharger(cv.toDataURL(type, qualite), nom);
-  dessiner(true);
+  dessiner(false); telecharger(cv.toDataURL(type, q), nom); dessiner(true); $('dExport').close();
 }
 $('btnPng').onclick = () => exporter('image/png', 'image-modifiee.png');
 $('btnJpg').onclick = () => exporter('image/jpeg', 'image-modifiee.jpg', 0.95);
@@ -414,21 +399,16 @@ $('btnPdf').onclick = () => {
   if (!img) return alert("Choisis d'abord une image.");
   if (!window.jspdf) return alert("La bibliothèque PDF n'a pas pu se charger (connexion ?). Utilise PNG ou JPG.");
   dessiner(false);
-  const { jsPDF } = window.jspdf;
-  const w = cv.width, h = cv.height;
-  const pdf = new jsPDF({ orientation: w > h ? 'l' : 'p', unit: 'px', format: [w, h], hotfixes: ['px_scaling'] });
-  pdf.addImage(cv.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, w, h);
-  pdf.save('image-modifiee.pdf');
-  dessiner(true);
+  const w = cv.width, h = cv.height, pdf = new window.jspdf.jsPDF({ orientation: w > h ? 'l' : 'p', unit: 'px', format: [w, h], hotfixes: ['px_scaling'] });
+  pdf.addImage(cv.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, w, h); pdf.save('image-modifiee.pdf');
+  dessiner(true); $('dExport').close();
 };
 $('btnJson').onclick = async () => {
-  const json = JSON.stringify(blocs.map(b => ({
-    x: b.x, y: b.y, w: b.w, h: b.h, mode: b.mode, fond: b.fond, texte: b.texte,
-    police: b.police, taille: b.taille, couleur: b.couleur, align: b.align, dx: b.dx, dy: b.dy
-  })), null, 2);
-  try { await navigator.clipboard.writeText(json); alert('Zones copiées.'); }
-  catch (err) { prompt('Copie ce texte :', json); }
+  const json = JSON.stringify(blocs.map(b => ({ x: b.x, y: b.y, w: b.w, h: b.h, mode: b.mode, fond: b.fond, texte: b.texte,
+    police: b.police, taille: b.taille, couleur: b.couleur, align: b.align, dx: b.dx, dy: b.dy })), null, 2);
+  try { await navigator.clipboard.writeText(json); alert('Zones copiées.'); } catch (e) { prompt('Copie ce texte :', json); }
 };
+majOutil(); astuce('Ouvre une image pour commencer.');
 </script>
 </body>
 </html>
