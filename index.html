@@ -1,414 +1,466 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Éditeur de texte sur image</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400&family=Open+Sans:wght@400;700&family=Lato:wght@400;700&family=Montserrat:wght@400;700&family=Poppins:wght@400;700&family=Merriweather:wght@400;700&family=Playfair+Display:wght@400;700&family=Oswald:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <style>
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{height:100%;margin:0;font-family:Arial,sans-serif;background:#222;color:#222}
-  #app{display:flex;flex-direction:column;height:100vh;height:100dvh}
-  header,#barre{display:flex;gap:6px;padding:6px;background:#1a73e8;overflow-x:auto;flex:none;align-items:center}
-  #barre{background:#fff;border-top:1px solid #ccc;display:none}
-  button,select,input,.btn{font-size:16px;min-height:42px;border:0;border-radius:8px;padding:0 12px;background:#fff;color:#222;flex:none}
-  header button,header .btn{background:#fff3;color:#fff;display:flex;align-items:center}
-  button.on{background:#1a73e8;color:#fff}
-  #barre button,#barre select,#barre input{background:#eee}
-  #barre #couleur{width:46px;padding:2px}
-  #taille{width:62px;text-align:center}
-  #astuce{flex:none;background:#333;color:#ddd;font-size:13px;padding:5px 8px;text-align:center}
-  #stage{flex:1;overflow:auto;display:flex;background:#555;min-height:0}
-  #scene{margin:auto;flex:none;position:relative}
-  canvas{display:block;background:#888}
-  #editeur{position:absolute;display:none;margin:0;border:0;outline:2px dashed #1a73e8;background:transparent;resize:none;overflow:hidden;white-space:pre;transform-origin:0 0}
-  dialog{border:0;border-radius:12px;width:min(94vw,460px);max-height:90vh;padding:14px}
-  dialog::backdrop{background:#0008}
-  dialog label{display:block;font-size:14px;margin:10px 0 3px}
-  dialog input,dialog select,dialog button{width:100%;background:#eee;margin-top:4px}
-  dialog .ok{background:#1a73e8;color:#fff}
-  dialog .rouge{background:#d93025;color:#fff}
-  .ligne{display:flex;gap:6px}.ligne>*{flex:1}
+:root{--ac:#1f5eff;--bg:#f2f5f7;--tx:#14202b;--bd:#c9d3dc}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--tx);padding:10px 10px 40px}
+h1{font-size:19px;margin:4px 0 8px}
+.bar{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+button,.btn{font:inherit;padding:10px 12px;border:1px solid var(--bd);background:#fff;color:var(--tx);border-radius:8px;cursor:pointer}
+button.main,.btn.main{background:var(--ac);color:#fff;border-color:var(--ac)}
+button.on{outline:3px solid var(--ac)}
+button:disabled{opacity:.5}
+#st{margin:6px 0;padding:8px 10px;background:#fff;border:1px solid var(--bd);border-radius:8px;font-size:14px;min-height:38px}
+#wrap{overflow:auto;border:1px solid var(--bd);background:#e4e9ed;border-radius:8px;max-height:65vh}
+#stage{position:relative;width:100%;line-height:0}
+#cv{display:block;width:100%;height:auto;background:#fff}
+#ov{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none}
+#zl{position:absolute;inset:0}
+#zl.draw{touch-action:none;cursor:crosshair}
+#zl.draw .z{pointer-events:none}
+.z{position:absolute;border:2px dashed var(--ac);background:rgba(31,94,255,.10);cursor:pointer}
+.z.on{border-style:solid;background:rgba(31,94,255,.22)}
+#panel{margin-top:10px;padding:12px;background:#fff;border:1px solid var(--bd);border-radius:10px;display:grid;gap:10px}
+#panel label{display:grid;gap:4px;font-size:14px}
+#panel input[type=text],#panel select{font:inherit;padding:10px;border:1px solid var(--bd);border-radius:8px;width:100%}
+#panel input[type=color]{width:56px;height:40px;padding:2px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+.row label{flex:1;min-width:120px}
+.row label.chk{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+[hidden]{display:none!important}
 </style>
 </head>
 <body>
-<div id="app">
-  <header>
-    <label class="btn" for="fichier">📁 Image</label>
-    <input type="file" id="fichier" accept="image/*" hidden>
-    <button id="btnAnnuler">↶ Annuler</button>
-    <button id="btnMain">✋ Défiler</button>
-    <button id="btnMoins">−</button><button id="btnFit">Ajuster</button><button id="btnPlus">+</button>
-    <button id="btnExport">⬇ Exporter</button>
-  </header>
-  <div id="astuce">Ouvre une image pour commencer.</div>
-  <div id="stage"><div id="scene"><canvas id="cv" width="10" height="10"></canvas>
-    <textarea id="editeur" wrap="off" spellcheck="false" autocapitalize="off"></textarea></div></div>
-  <div id="barre">
-    <button id="btnEcrire">✏️ Écrire</button>
-    <select id="police">
-      <option>Arial</option><option>Times New Roman</option><option>Georgia</option><option>Verdana</option>
-      <option>Trebuchet MS</option><option>Courier New</option><option>Impact</option><option>Comic Sans MS</option>
-    </select>
-    <button id="tMoins">A−</button><input type="number" id="taille" min="4" max="1000"><button id="tPlus">A+</button>
-    <input type="color" id="couleur">
-    <button id="bGras"><b>G</b></button><button id="bItal"><i>I</i></button><button id="bAlign">⬅</button>
-    <button id="btnReglages">⚙ Réglages</button>
-  </div>
+<h1>Éditeur de texte sur image</h1>
+
+<div class="bar">
+  <label class="btn main">1. Choisir l’image<input id="file" type="file" accept="image/*" hidden></label>
+  <button id="detect" disabled>2. Détecter les textes</button>
+  <button id="add" disabled>Ajouter une zone</button>
 </div>
+<div class="bar">
+  <button id="zm">Zoom −</button><button id="zp">Zoom +</button>
+  <button id="undo" disabled>Annuler</button>
+</div>
+<div id="st">Choisis une image pour commencer.</div>
 
-<dialog id="dReglages">
-  <div class="ligne">
-    <div><label>Fond</label><select id="mode"><option value="auto">Reconstruit</option><option value="uni">Couleur unie</option></select></div>
-    <div><label>Couleur unie</label><input type="color" id="fond"></div>
-  </div>
-  <div class="ligne">
-    <button id="pipT">💧 Pipette texte</button><button id="pipF">💧 Pipette fond</button>
-  </div>
-  <label>Position du texte (flèches = 1 px)</label>
-  <div class="ligne"><button id="nG">◀</button><button id="nH">▲</button><button id="nB">▼</button><button id="nD">▶</button></div>
-  <div class="ligne">
-    <div><label>Décalage X</label><input type="number" id="dx"></div>
-    <div><label>Décalage Y</label><input type="number" id="dy"></div>
-    <div><label>Espacement</label><input type="number" id="espacement" step="0.5"></div>
-  </div>
-  <label><input type="checkbox" id="ajuster" style="width:auto"> Réduire le texte pour qu'il tienne dans la zone</label>
-  <button id="btnCaler">Caler la largeur sur l'ancien texte</button>
-  <button id="btnAuto">Ré-analyser la zone (fond, couleur, taille)</button>
-  <label>Ajouter une police (.ttf, .otf)</label><input type="file" id="fichierPolice" accept=".ttf,.otf,.woff,.woff2">
-  <button class="rouge" id="btnSuppr">Supprimer cette zone</button>
-  <button class="ok" id="fermerR">Fermer</button>
-</dialog>
+<div id="wrap"><div id="stage"><canvas id="cv" width="300" height="150"></canvas><canvas id="ov" width="300" height="150"></canvas><div id="zl"></div></div></div>
 
-<dialog id="dExport">
-  <button class="ok" id="btnPng">Télécharger en PNG</button>
-  <button class="ok" id="btnJpg">Télécharger en JPG</button>
-  <button class="ok" id="btnPdf">Télécharger en PDF</button>
-  <button id="btnJson">Copier les zones (JSON pour PHP/Python)</button>
-  <button id="fermerE">Fermer</button>
-</dialog>
+<section id="panel" hidden>
+  <label>Texte<input id="txt" type="text" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+  <div class="row">
+    <label>Police<select id="font"></select></label>
+    <button id="auto" type="button">Police auto</button>
+  </div>
+  <div class="row">
+    <label class="chk"><input type="checkbox" id="bold"> Gras</label>
+    <label class="chk"><input type="checkbox" id="ital"> Italique</label>
+    <label class="chk">Couleur <input type="color" id="col" value="#000000"></label>
+  </div>
+  <label>Taille : <span id="szv"></span> px<input type="range" id="sz" min="6" max="400" step="0.5"></label>
+  <label>Alignement<select id="al"><option value="left">À gauche</option><option value="center">Centré</option><option value="right">À droite</option></select></label>
+  <div class="row">
+    <button id="apply" class="main" type="button">Appliquer</button>
+    <button id="del" type="button">Supprimer la zone</button>
+    <button id="close" type="button">Fermer</button>
+  </div>
+</section>
+
+<div class="bar" style="margin-top:14px">
+  <button id="png" disabled>Exporter PNG</button>
+  <button id="jpg" disabled>Exporter JPG</button>
+  <button id="pdf" disabled>Exporter PDF</button>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
-const cv = $('cv'), ctx = cv.getContext('2d');
-const src = document.createElement('canvas');
-const sctx = src.getContext('2d', { willReadFrequently: true });
-const ed = $('editeur');
-const PAD = 2, BANDE = 4;
-let img = null, blocs = [], sel = -1, action = null, outil = 'zone', zoom = 1, histo = [], aFocaliser = false;
-const B = () => blocs[sel];
+const cv = $("cv"), ctx = cv.getContext("2d", { willReadFrequently: true });
+const ov = $("ov"), ovc = ov.getContext("2d");
+const zl = $("zl"), stage = $("stage");
+const mc = document.createElement("canvas").getContext("2d");
 
-function astuce(t) { $('astuce').textContent = t; }
+const FONTS = [
+  { n: "Arial", g: "Helvetica, sans-serif" }, { n: "Times New Roman", g: "Times, serif" },
+  { n: "Georgia", g: "serif" }, { n: "Verdana", g: "sans-serif" },
+  { n: "Courier New", g: "monospace" }, { n: "Roboto", g: "sans-serif" },
+  { n: "Open Sans", g: "sans-serif" }, { n: "Lato", g: "sans-serif" },
+  { n: "Montserrat", g: "sans-serif" }, { n: "Poppins", g: "sans-serif" },
+  { n: "Merriweather", g: "serif" }, { n: "Playfair Display", g: "serif" },
+  { n: "Oswald", g: "sans-serif" }
+];
+$("font").innerHTML = FONTS.map(f => `<option>${f.n}</option>`).join("");
 
-/* ---------- Image ---------- */
-$('fichier').addEventListener('change', e => {
+let zones = [], sel = null, hist = [], busy = false, loaded = false;
+let zoom = 1, drawMode = false, worker = null, pv = 0;
+
+const setStatus = t => { $("st").textContent = t; };
+const fontStr = (z, size) => {
+  const f = FONTS.find(x => x.n === z.font) || FONTS[0];
+  return `${z.italic ? "italic " : ""}${z.bold ? 700 : 400} ${size}px "${f.n}", ${f.g}`;
+};
+const hex = (r, g, b) => "#" + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, "0")).join("");
+
+function enable() {
+  ["detect", "add", "png", "jpg", "pdf"].forEach(i => $(i).disabled = !loaded);
+  $("undo").disabled = hist.length === 0;
+}
+
+/* ---------- Chargement de l’image ---------- */
+$("file").onchange = e => {
   const f = e.target.files[0]; if (!f) return;
-  const im = new Image();
-  im.onload = () => {
-    img = im; cv.width = src.width = im.naturalWidth; cv.height = src.height = im.naturalHeight;
-    sctx.drawImage(im, 0, 0); blocs = []; sel = -1; histo = []; zoom = 1;
-    majZoom(); rafraichir();
-    astuce("Entoure l'ancien texte avec le doigt (laisse un peu de marge).");
+  const img = new Image();
+  img.onload = () => {
+    const mx = 3200, k = Math.min(1, mx / Math.max(img.naturalWidth, img.naturalHeight));
+    cv.width = ov.width = Math.round(img.naturalWidth * k);
+    cv.height = ov.height = Math.round(img.naturalHeight * k);
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(img, 0, 0, cv.width, cv.height);
+    zones = []; sel = null; hist = []; loaded = true;
+    $("panel").hidden = true; renderZones(); enable();
+    setStatus("Image chargée. Touche « 2. Détecter les textes ».");
   };
-  im.src = URL.createObjectURL(f);
-});
+  img.onerror = () => setStatus("Impossible de lire cette image.");
+  img.src = URL.createObjectURL(f);
+};
 
-function majZoom() {
-  if (!img) return;
-  const fit = ($('stage').clientWidth - 8) / cv.width;
-  cv.style.width = (cv.width * fit * zoom) + 'px'; cv.style.height = 'auto';
-  placerEditeur();
-}
-window.addEventListener('resize', majZoom);
-$('btnPlus').onclick = () => { zoom = Math.min(8, zoom * 1.4); majZoom(); };
-$('btnMoins').onclick = () => { zoom = Math.max(0.3, zoom / 1.4); majZoom(); };
-$('btnFit').onclick = () => { zoom = 1; majZoom(); };
-$('btnMain').onclick = () => { outil = outil === 'main' ? 'zone' : 'main'; majOutil(); };
-function majOutil() {
-  $('btnMain').classList.toggle('on', outil === 'main');
-  cv.style.touchAction = outil === 'main' ? 'auto' : 'none';
-  if (outil === 'main') astuce("Mode défilement : fais glisser l'image. Retouche ✋ pour revenir au dessin.");
-  else if (outil === 'zone') astuce("Entoure l'ancien texte avec le doigt, ou touche une zone pour la modifier.");
-  else astuce("Pipette : touche l'image à l'endroit de la couleur à copier.");
+/* ---------- Lecture du texte (OCR) ---------- */
+async function getWorker() {
+  if (typeof Tesseract === "undefined") throw new Error("Connexion internet nécessaire pour charger le moteur de lecture.");
+  if (!worker) {
+    worker = await Tesseract.createWorker("fra+eng", 1, {
+      logger: m => { if (m.status === "recognizing text") setStatus("Lecture du texte… " + Math.round(m.progress * 100) + " %"); }
+    });
+  }
+  return worker;
 }
 
-/* ---------- Fond reconstruit ---------- */
-function mediane(liste) {
-  return [0, 1, 2].map(c => liste.map(p => p[c]).sort((a, b) => a - b)[Math.floor(liste.length / 2)]);
-}
-function fondDegrade(x, y, w, h) {
-  const X = Math.max(0, Math.round(x) - PAD), Y = Math.max(0, Math.round(y) - PAD);
-  const X2 = Math.min(src.width, Math.round(x + w) + PAD), Y2 = Math.min(src.height, Math.round(y + h) + PAD);
-  const W = Math.max(1, X2 - X), H = Math.max(1, Y2 - Y);
-  const rx = Math.max(0, X - BANDE), ry = Math.max(0, Y - BANDE);
-  const rw = Math.min(src.width, X2 + BANDE) - rx, rh = Math.min(src.height, Y2 + BANDE) - ry;
-  const d = sctx.getImageData(rx, ry, rw, rh).data;
-  const px = (ix, iy) => { const k = ((iy - ry) * rw + (ix - rx)) * 4; return [d[k], d[k + 1], d[k + 2]]; };
-  const T = [], Bo = [], L = [], R = [];
-  for (let i = 0; i < W; i++) {
-    const ix = X + i, t = [], b = [];
-    for (let k = 1; k <= BANDE; k++) {
-      if (Y - k >= 0) t.push(px(ix, Y - k));
-      if (Y2 - 1 + k < src.height) b.push(px(ix, Y2 - 1 + k));
-    }
-    T.push(t.length ? mediane(t) : null); Bo.push(b.length ? mediane(b) : null);
-  }
-  for (let j = 0; j < H; j++) {
-    const iy = Y + j, l = [], r = [];
-    for (let k = 1; k <= BANDE; k++) {
-      if (X - k >= 0) l.push(px(X - k, iy));
-      if (X2 - 1 + k < src.width) r.push(px(X2 - 1 + k, iy));
-    }
-    L.push(l.length ? mediane(l) : null); R.push(r.length ? mediane(r) : null);
-  }
-  const tout = [...T, ...Bo, ...L, ...R].filter(Boolean);
-  const moy = tout.length ? mediane(tout) : [255, 255, 255];
-  for (let i = 0; i < W; i++) { T[i] = T[i] || Bo[i] || moy; Bo[i] = Bo[i] || T[i]; }
-  for (let j = 0; j < H; j++) { L[j] = L[j] || R[j] || moy; R[j] = R[j] || L[j]; }
-  const c = document.createElement('canvas'); c.width = W; c.height = H;
-  const cx = c.getContext('2d'), out = cx.createImageData(W, H), o = out.data;
-  for (let j = 0; j < H; j++) {
-    const v = H > 1 ? j / (H - 1) : 0;
-    for (let i = 0; i < W; i++) {
-      const u = W > 1 ? i / (W - 1) : 0, k = (j * W + i) * 4;
-      for (let ch = 0; ch < 3; ch++)
-        o[k + ch] = ((L[j][ch] * (1 - u) + R[j][ch] * u) + (T[i][ch] * (1 - v) + Bo[i][ch] * v)) / 2;
-      o[k + 3] = 255;
-    }
-  }
-  cx.putImageData(out, 0, 0);
-  const m = (Math.floor(H / 2) * W + Math.floor(W / 2)) * 4;
-  return { canvas: c, data: o, X, Y, moyenne: hex3(o[m], o[m + 1], o[m + 2]) };
-}
-const hex3 = (r, g, b) => '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
-function assurerFond(b) {
-  if (!b.fillCanvas) { const f = fondDegrade(b.x, b.y, b.w, b.h); b.fillCanvas = f.canvas; b.fillX = f.X; b.fillY = f.Y; }
+$("detect").onclick = async () => {
+  if (!loaded || busy) return;
+  busy = true; closePanel();
+  try {
+    setStatus("Chargement du moteur de lecture… (la 1re fois peut durer 20 à 40 s)");
+    const wk = await getWorker();
+    const s = cv.width < 1600 ? 2 : 1;
+    const c = document.createElement("canvas"); c.width = cv.width * s; c.height = cv.height * s;
+    const g = c.getContext("2d"); g.filter = "grayscale(1) contrast(1.2)";
+    g.drawImage(cv, 0, 0, c.width, c.height);
+    const { data } = await wk.recognize(c);
+    const lines = data.lines || (data.blocks || []).flatMap(b => b.paragraphs.flatMap(p => p.lines));
+    zones = lines.filter(l => l.text.trim().length > 0 && l.confidence > 25).map(l => {
+      const t = l.text.trim().replace(/\s+/g, " ");
+      return { x: l.bbox.x0 / s, y: l.bbox.y0 / s, w: (l.bbox.x1 - l.bbox.x0) / s, h: (l.bbox.y1 - l.bbox.y0) / s, orig: t, text: t, styled: false };
+    });
+    renderZones();
+    setStatus(zones.length ? zones.length + " zones trouvées. Touche une zone bleue pour la modifier. Texte manquant : « Ajouter une zone »." : "Aucun texte trouvé. Utilise « Ajouter une zone » pour entourer un texte.");
+  } catch (err) { setStatus("Erreur : " + err.message); }
+  busy = false;
+};
+
+async function ocrRegion(x, y, w, h) {
+  const s = 2, c = document.createElement("canvas"); c.width = w * s; c.height = h * s;
+  c.getContext("2d").drawImage(cv, x, y, w, h, 0, 0, c.width, c.height);
+  const wk = await getWorker();
+  const { data } = await wk.recognize(c);
+  return (data.text || "").replace(/\s+/g, " ").trim();
 }
 
-/* ---------- Analyse de l'ancien texte ---------- */
-function analyser(f) {
-  const W = f.canvas.width, H = f.canvas.height;
-  const o = sctx.getImageData(f.X, f.Y, W, H).data, g = f.data, dist = new Float32Array(W * H);
-  let max = 0;
-  for (let k = 0; k < W * H; k++) {
-    const q = k * 4, dd = Math.abs(o[q] - g[q]) + Math.abs(o[q + 1] - g[q + 1]) + Math.abs(o[q + 2] - g[q + 2]);
-    dist[k] = dd; if (dd > max) max = dd;
-  }
-  if (max < 60) return null;
-  const seuil = Math.max(45, max * 0.45);
-  let x0 = W, x1 = -1, y0 = H, y1 = -1, r = 0, gg = 0, b = 0, n = 0;
-  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
-    const k = j * W + i;
-    if (dist[k] >= seuil) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (j < y0) y0 = j; if (j > y1) y1 = j; }
-    if (dist[k] >= max * 0.8) { r += o[k * 4]; gg += o[k * 4 + 1]; b += o[k * 4 + 2]; n++; }
-  }
-  return { couleur: hex3(r / n, gg / n, b / n), x0: f.X + x0, x1: f.X + x1, y0: f.Y + y0, y1: f.Y + y1 };
-}
-function reglagesAuto(b) {
-  const f = fondDegrade(b.x, b.y, b.w, b.h);
-  b.fillCanvas = f.canvas; b.fillX = f.X; b.fillY = f.Y; b.fond = f.moyenne;
-  const a = analyser(f); if (!a) return;
-  b.taille = Math.max(6, Math.round((a.y1 - a.y0 + 1) / 0.9));
-  b.couleur = a.couleur; b.inkW = a.x1 - a.x0 + 1;
-  const gauche = a.x0 - b.x, droite = (b.x + b.w) - a.x1;
-  if (Math.abs(gauche - droite) < 0.1 * b.w) { b.align = 'center'; b.dx = Math.round((a.x0 + a.x1) / 2 - (b.x + b.w / 2)); }
-  else if (gauche < droite) { b.align = 'left'; b.dx = Math.round(gauche - 2); }
-  else { b.align = 'right'; b.dx = -Math.round(droite - 2); }
-  b.dy = Math.round((a.y0 + a.y1) / 2 - (b.y + b.h / 2));
-}
-
-/* ---------- Dessin ---------- */
-const police = (b, t) => `${b.style} ${t}px "${b.police}"`;
-function tailleAjustee(b) {
-  let t = b.taille; if (!b.ajuster) return t;
-  const l = b.texte.split('\n');
-  ctx.font = police(b, t);
-  while (t > 4 && (Math.max(...l.map(s => ctx.measureText(s).width)) > b.w - 4 || l.length * t * 1.2 > b.h - 2)) {
-    t--; ctx.font = police(b, t);
-  }
-  return t;
-}
-function ecrireBloc(b, sansTexte) {
-  assurerFond(b);
-  if (b.mode === 'auto') ctx.drawImage(b.fillCanvas, b.fillX, b.fillY);
-  else { ctx.fillStyle = b.fond; ctx.fillRect(b.fillX, b.fillY, b.fillCanvas.width, b.fillCanvas.height); }
-  if (sansTexte) return;
-  const lignes = b.texte.split('\n'), taille = tailleAjustee(b), ls = 'letterSpacing' in ctx;
-  if (ls) ctx.letterSpacing = (b.espacement || 0) + 'px';
-  ctx.font = police(b, taille); ctx.fillStyle = b.couleur; ctx.textBaseline = 'middle'; ctx.textAlign = b.align;
-  const lh = taille * 1.2;
-  const x = (b.align === 'left' ? b.x + 2 : b.align === 'right' ? b.x + b.w - 2 : b.x + b.w / 2) + b.dx;
-  const y0 = b.y + b.h / 2 + b.dy - lh * (lignes.length - 1) / 2;
-  lignes.forEach((l, i) => ctx.fillText(l, x, y0 + i * lh));
-  if (ls) ctx.letterSpacing = '0px';
-}
-function dessiner(ui) {
-  ctx.clearRect(0, 0, cv.width, cv.height);
-  if (!img) return;
-  ctx.drawImage(src, 0, 0);
-  blocs.forEach((b, i) => ecrireBloc(b, ui && i === sel));
-  if (ui && action) {
-    ctx.save(); ctx.strokeStyle = '#d93025'; ctx.lineWidth = Math.max(2, cv.width / 300);
-    ctx.strokeRect(action.x, action.y, action.w, action.h); ctx.restore();
-  }
-}
-
-/* ---------- Zone de texte posée sur l'image ---------- */
-function placerEditeur() {
-  if (sel < 0 || !img) { ed.style.display = 'none'; return; }
-  const b = B(), k = cv.clientWidth / cv.width, t = tailleAjustee(b), lh = t * 1.2, n = b.texte.split('\n').length;
-  if (document.activeElement !== ed) ed.value = b.texte;
-  Object.assign(ed.style, {
-    display: 'block', left: b.x * k + 'px', top: b.y * k + 'px', width: b.w * k + 'px', height: b.h * k + 'px',
-    font: police(b, t * k), lineHeight: lh * k + 'px', color: b.couleur, caretColor: b.couleur,
-    textAlign: b.align, letterSpacing: (b.espacement || 0) * k + 'px',
-    padding: `${Math.max(0, (b.h - lh * n) / 2) * k}px ${2 * k}px 0`,
-    transform: `translate(${b.dx * k}px,${b.dy * k}px)`
+/* ---------- Zones ---------- */
+function renderZones() {
+  zl.innerHTML = "";
+  zones.forEach(z => {
+    const d = document.createElement("div");
+    d.className = "z" + (z === sel ? " on" : "");
+    d.style.left = z.x / cv.width * 100 + "%"; d.style.top = z.y / cv.height * 100 + "%";
+    d.style.width = z.w / cv.width * 100 + "%"; d.style.height = z.h / cv.height * 100 + "%";
+    d.onclick = e => { e.stopPropagation(); select(z); };
+    zl.appendChild(d);
   });
 }
-ed.addEventListener('input', () => { B().texte = ed.value; placerEditeur(); });
-$('btnEcrire').onclick = () => { if (sel >= 0) { ed.focus(); ed.select(); } };
 
-/* ---------- Barre d'outils ---------- */
-function rafraichir() { majBarre(); placerEditeur(); dessiner(true); }
-function majBarre() {
-  $('barre').style.display = sel >= 0 ? 'flex' : 'none';
-  if (sel < 0) return;
-  const b = B();
-  $('police').value = b.police; $('taille').value = b.taille; $('couleur').value = b.couleur;
-  $('bGras').classList.toggle('on', b.style.includes('bold'));
-  $('bItal').classList.toggle('on', b.style.includes('italic'));
-  $('bAlign').textContent = { left: '⬅', center: '↔', right: '➡' }[b.align];
-}
-function regler(cle, val) { if (sel < 0) return; B()[cle] = val; rafraichir(); }
-$('police').onchange = e => regler('police', e.target.value);
-$('taille').oninput = e => regler('taille', Number(e.target.value) || 12);
-$('tMoins').onclick = () => sel >= 0 && regler('taille', Math.max(4, B().taille - 1));
-$('tPlus').onclick = () => sel >= 0 && regler('taille', B().taille + 1);
-$('couleur').oninput = e => regler('couleur', e.target.value);
-function style(gras, ital) { return ((ital ? 'italic ' : '') + (gras ? 'bold' : '')).trim() || 'normal'; }
-$('bGras').onclick = () => sel >= 0 && regler('style', style(!B().style.includes('bold'), B().style.includes('italic')));
-$('bItal').onclick = () => sel >= 0 && regler('style', style(B().style.includes('bold'), !B().style.includes('italic')));
-$('bAlign').onclick = () => sel >= 0 && regler('align', { left: 'center', center: 'right', right: 'left' }[B().align]);
-
-/* ---------- Réglages avancés ---------- */
-$('btnReglages').onclick = () => {
-  const b = B();
-  $('mode').value = b.mode; $('fond').value = b.fond; $('dx').value = b.dx; $('dy').value = b.dy;
-  $('espacement').value = b.espacement; $('ajuster').checked = b.ajuster;
-  $('dReglages').showModal();
+$("add").onclick = () => {
+  drawMode = !drawMode;
+  $("add").classList.toggle("on", drawMode); zl.classList.toggle("draw", drawMode);
+  setStatus(drawMode ? "Entoure le texte avec ton doigt (glisse un rectangle)." : "Mode ajout désactivé.");
 };
-$('fermerR').onclick = () => $('dReglages').close();
-$('mode').onchange = e => regler('mode', e.target.value);
-$('fond').oninput = e => { regler('fond', e.target.value); regler('mode', 'uni'); $('mode').value = 'uni'; };
-const num = id => e => { regler(id, Number(e.target.value) || 0); };
-$('dx').oninput = num('dx'); $('dy').oninput = num('dy'); $('espacement').oninput = num('espacement');
-$('ajuster').onchange = e => regler('ajuster', e.target.checked);
-const pousser = (cle, d) => () => { regler(cle, B()[cle] + d); $(cle).value = B()[cle]; };
-$('nG').onclick = pousser('dx', -1); $('nD').onclick = pousser('dx', 1);
-$('nH').onclick = pousser('dy', -1); $('nB').onclick = pousser('dy', 1);
-$('btnCaler').onclick = () => {
-  const b = B(); if (!b.inkW) return alert("Ancien texte non détecté : règle la taille à la main.");
-  ctx.font = police(b, b.taille);
-  const l = Math.max(...b.texte.split('\n').map(s => ctx.measureText(s).width));
-  if (l > 0) regler('taille', Math.max(4, Math.round(b.taille * b.inkW / l)));
-  $('dReglages').close();
-};
-$('btnAuto').onclick = () => { pousserHisto(); reglagesAuto(B()); rafraichir(); $('dReglages').close(); };
-$('btnSuppr').onclick = () => { pousserHisto(); blocs.splice(sel, 1); sel = -1; rafraichir(); $('dReglages').close(); };
-$('pipT').onclick = () => { outil = 'pipT'; majOutil(); $('dReglages').close(); };
-$('pipF').onclick = () => { outil = 'pipF'; majOutil(); $('dReglages').close(); };
-$('fichierPolice').addEventListener('change', async e => {
-  const f = e.target.files[0]; if (!f) return;
-  const nom = f.name.replace(/\.[^.]+$/, ''), p = new FontFace(nom, await f.arrayBuffer());
-  await p.load(); document.fonts.add(p);
-  const o = document.createElement('option'); o.textContent = nom; $('police').appendChild(o);
-  regler('police', nom);
+let ds = null, dr = null;
+zl.addEventListener("pointerdown", e => {
+  if (!drawMode) return;
+  const r = zl.getBoundingClientRect();
+  ds = { x: e.clientX - r.left, y: e.clientY - r.top };
+  dr = document.createElement("div"); dr.className = "z on"; zl.appendChild(dr);
+  zl.setPointerCapture(e.pointerId); e.preventDefault();
+});
+zl.addEventListener("pointermove", e => {
+  if (!ds) return;
+  const r = zl.getBoundingClientRect(), cx = e.clientX - r.left, cy = e.clientY - r.top;
+  dr.style.left = Math.min(ds.x, cx) + "px"; dr.style.top = Math.min(ds.y, cy) + "px";
+  dr.style.width = Math.abs(cx - ds.x) + "px"; dr.style.height = Math.abs(cy - ds.y) + "px";
+});
+zl.addEventListener("pointerup", async e => {
+  if (!ds) return;
+  const r = zl.getBoundingClientRect(), k = cv.width / r.width;
+  const cx = e.clientX - r.left, cy = e.clientY - r.top;
+  const x = Math.max(0, Math.min(ds.x, cx) * k), y = Math.max(0, Math.min(ds.y, cy) * k);
+  const w = Math.min(cv.width - x, Math.abs(cx - ds.x) * k), h = Math.min(cv.height - y, Math.abs(cy - ds.y) * k);
+  ds = null; dr.remove(); dr = null;
+  drawMode = false; $("add").classList.remove("on"); zl.classList.remove("draw");
+  if (w < 8 || h < 8 || busy) return;
+  busy = true;
+  try {
+    setStatus("Lecture de la zone…");
+    const t = await ocrRegion(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+    const z = { x, y, w, h, orig: t, text: t, styled: false };
+    zones.push(z); renderZones(); busy = false; await select(z);
+  } catch (err) { setStatus("Erreur : " + err.message); }
+  busy = false;
 });
 
-/* ---------- Annuler ---------- */
-const snapshot = () => JSON.stringify(blocs, (k, v) => (k === 'fillCanvas' ? undefined : v));
-function pousserHisto() { histo.push(snapshot()); if (histo.length > 30) histo.shift(); }
-$('btnAnnuler').onclick = () => {
-  if (!histo.length) return;
-  blocs = JSON.parse(histo.pop()); sel = -1; rafraichir();
+/* ---------- Analyse : fond, couleur, position du texte ---------- */
+function analyse(z) {
+  const W = cv.width, H = cv.height, pad = 3, m = 3;
+  const x = Math.max(0, Math.floor(z.x - pad)), y = Math.max(0, Math.floor(z.y - pad));
+  const w = Math.min(W, Math.ceil(z.x + z.w + pad)) - x, h = Math.min(H, Math.ceil(z.y + z.h + pad)) - y;
+  if (w < 2 || h < 2) return false;
+  const X0 = Math.max(0, x - m), Y0 = Math.max(0, y - m), X1 = Math.min(W, x + w + m), Y1 = Math.min(H, y + h + m);
+  const BW = X1 - X0, bd = ctx.getImageData(X0, Y0, BW, Y1 - Y0).data;
+  const px = (ax, ay) => {
+    ax = Math.min(X1 - 1, Math.max(X0, ax)); ay = Math.min(Y1 - 1, Math.max(Y0, ay));
+    const i = ((ay - Y0) * BW + (ax - X0)) * 4; return [bd[i], bd[i + 1], bd[i + 2]];
+  };
+  const avg = a => { let r = 0, g = 0, b = 0; a.forEach(p => { r += p[0]; g += p[1]; b += p[2]; }); const n = a.length; return [r / n, g / n, b / n]; };
+  const L = [], R = [], T = [], B = [];
+  for (let r = 0; r < h; r++) {
+    const a = [], b = [];
+    for (let k = 1; k <= m; k++) { a.push(px(x - k, y + r)); b.push(px(x + w - 1 + k, y + r)); }
+    L.push(avg(a)); R.push(avg(b));
+  }
+  for (let c = 0; c < w; c++) {
+    const a = [], b = [];
+    for (let k = 1; k <= m; k++) { a.push(px(x + c, y - k)); b.push(px(x + c, y + h - 1 + k)); }
+    T.push(avg(a)); B.push(avg(b));
+  }
+  const cd = ctx.getImageData(x, y, w, h).data;
+  const bg = new Float32Array(w * h * 3), dist = new Float32Array(w * h);
+  let mx = 0;
+  for (let r = 0; r < h; r++) {
+    const ty = (r + .5) / h;
+    for (let c = 0; c < w; c++) {
+      const tx = (c + .5) / w, i = r * w + c;
+      let d = 0;
+      for (let k = 0; k < 3; k++) {
+        bg[i * 3 + k] = ((L[r][k] * (1 - tx) + R[r][k] * tx) + (T[c][k] * (1 - ty) + B[c][k] * ty)) / 2;
+        d += Math.abs(cd[i * 4 + k] - bg[i * 3 + k]);
+      }
+      dist[i] = d; if (d > mx) mx = d;
+    }
+  }
+  const thr = Math.max(40, mx * .3), mask = new Uint8Array(w * h);
+  let cr = 0, cg = 0, cb = 0, cn = 0, l = w, rr = -1, t = h, b = -1;
+  const rows = new Uint32Array(h);
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) {
+    const i = r * w + c;
+    if (dist[i] > thr) {
+      mask[i] = 1; rows[r]++;
+      if (c < l) l = c; if (c > rr) rr = c; if (r < t) t = r; if (r > b) b = r;
+      if (dist[i] >= mx * .7) { cr += cd[i * 4]; cg += cd[i * 4 + 1]; cb += cd[i * 4 + 2]; cn++; }
+    }
+  }
+  if (rr < 0) { l = Math.round(pad); rr = w - 1 - pad; t = Math.round(pad); b = h - 1 - pad; }
+  let mr = 0; rows.forEach(v => { if (v > mr) mr = v; });
+  let base = b;
+  for (let r = b; r >= t; r--) if (rows[r] >= mr * .3) { base = r; break; }
+  const rad = Math.max(1, Math.round((b - t + 1) * .08));
+  const tmp = new Uint8Array(w * h), dil = new Uint8Array(w * h);
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) if (mask[r * w + c])
+    for (let k = Math.max(0, c - rad); k <= Math.min(w - 1, c + rad); k++) tmp[r * w + k] = 1;
+  for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) if (tmp[r * w + c])
+    for (let k = Math.max(0, r - rad); k <= Math.min(h - 1, r + rad); k++) dil[k * w + c] = 1;
+  const pc = document.createElement("canvas"); pc.width = w; pc.height = h;
+  const pg = pc.getContext("2d"), pd = pg.createImageData(w, h);
+  for (let i = 0; i < w * h; i++) if (dil[i]) {
+    pd.data[i * 4] = bg[i * 3]; pd.data[i * 4 + 1] = bg[i * 3 + 1]; pd.data[i * 4 + 2] = bg[i * 3 + 2]; pd.data[i * 4 + 3] = 255;
+  }
+  pg.putImageData(pd, 0, 0);
+  z.box = { x, y, w, h }; z.patchCv = pc;
+  z.ink = { l: x + l, r: x + rr, t: y + t, b: y + b, base: y + base + 1 };
+  z.mi = { mask, w, h, l, t, rr, b };
+  z.autoColor = cn ? hex(cr / cn, cg / cn, cb / cn) : "#000000";
+  return true;
+}
+
+/* ---------- Choix de la police la plus proche ---------- */
+function inkWidth(font, text) {
+  mc.font = font; const m = mc.measureText(text);
+  return m.actualBoundingBoxLeft + m.actualBoundingBoxRight;
+}
+function fitSize(z) {
+  const mw = z.mi.rr - z.mi.l + 1;
+  if (!z.orig) return Math.max(8, (z.mi.b - z.mi.t + 1) * 1.1);
+  const w100 = inkWidth(fontStr(z, 100), z.orig);
+  return Math.min(400, Math.max(6, w100 > 0 ? 100 * mw / w100 : 20));
+}
+async function pickFont(z) {
+  const fb = { font: "Arial", bold: false };
+  const txt = z.orig;
+  if (!txt || txt.length < 2) return fb;
+  try {
+    await Promise.all(FONTS.flatMap(f => [400, 700].map(w => document.fonts.load(`${w} 20px "${f.n}"`, txt))));
+  } catch (e) {}
+  const mi = z.mi, mw = mi.rr - mi.l + 1, mh = mi.b - mi.t + 1;
+  const o = document.createElement("canvas"), oc = o.getContext("2d", { willReadFrequently: true });
+  const t = document.createElement("canvas"); t.width = mw; t.height = mh;
+  const tc = t.getContext("2d", { willReadFrequently: true });
+  let best = -1, res = fb;
+  for (const f of FONTS) for (const bold of [false, true]) {
+    const cand = { font: f.n, bold, italic: false };
+    const w100 = inkWidth(fontStr(cand, 100), txt);
+    if (w100 <= 0) continue;
+    const s = Math.min(300, 100 * mw / w100);
+    o.width = Math.ceil(mw) + 40; o.height = Math.ceil(s * 2) + 20;
+    oc.clearRect(0, 0, o.width, o.height);
+    oc.font = fontStr(cand, s); oc.fillStyle = "#000"; oc.textBaseline = "alphabetic";
+    const abl = oc.measureText(txt).actualBoundingBoxLeft;
+    oc.fillText(txt, 20 + abl, s * 1.4);
+    const d = oc.getImageData(0, 0, o.width, o.height).data;
+    let x0 = o.width, x1 = -1, y0 = o.height, y1 = -1;
+    for (let r = 0; r < o.height; r++) for (let c = 0; c < o.width; c++) if (d[(r * o.width + c) * 4 + 3] > 100) {
+      if (c < x0) x0 = c; if (c > x1) x1 = c; if (r < y0) y0 = r; if (r > y1) y1 = r;
+    }
+    if (x1 < 0) continue;
+    tc.clearRect(0, 0, mw, mh);
+    tc.drawImage(o, x0, y0, x1 - x0 + 1, y1 - y0 + 1, 0, 0, mw, y1 - y0 + 1);
+    const td = tc.getImageData(0, 0, mw, mh).data;
+    let inter = 0, uni = 0;
+    for (let r = 0; r < mh; r++) for (let c = 0; c < mw; c++) {
+      const a = mi.mask[(r + mi.t) * mi.w + c + mi.l] === 1, b = td[(r * mw + c) * 4 + 3] > 100;
+      if (a && b) inter++; if (a || b) uni++;
+    }
+    const score = uni ? inter / uni : 0;
+    if (score > best) { best = score; res = { font: f.n, bold }; }
+  }
+  return res;
+}
+
+/* ---------- Sélection et édition ---------- */
+async function applyAutoStyle(z) {
+  setStatus("Analyse de la police…");
+  const r = await pickFont(z);
+  z.font = r.font; z.bold = r.bold; z.italic = false; z.align = "left";
+  z.size = fitSize(z);
+}
+async function select(z) {
+  if (busy) return;
+  busy = true;
+  try {
+    sel = null; ovc.clearRect(0, 0, ov.width, ov.height);
+    if (!analyse(z)) { setStatus("Zone trop petite."); busy = false; return; }
+    if (!z.styled) {
+      z.color = z.autoColor; z.text = z.orig;
+      await applyAutoStyle(z); z.styled = true;
+    }
+    z.dirty = false; sel = z; fillPanel(); renderZones();
+    setStatus("Modifie le texte, puis touche « Appliquer ».");
+    $("panel").scrollIntoView({ block: "nearest", behavior: "smooth" });
+  } catch (err) { setStatus("Erreur : " + err.message); }
+  busy = false;
+}
+function fillPanel() {
+  const z = sel; $("panel").hidden = !z; if (!z) return;
+  $("txt").value = z.text; $("font").value = z.font; $("bold").checked = z.bold; $("ital").checked = z.italic;
+  $("col").value = z.color; $("sz").value = z.size; $("szv").textContent = Math.round(z.size * 10) / 10; $("al").value = z.align;
+}
+function closePanel() { sel = null; $("panel").hidden = true; ovc.clearRect(0, 0, ov.width, ov.height); renderZones(); }
+
+function drawText(c, z) {
+  if (!z.text) return [z.ink.l, z.ink.l];
+  c.save();
+  c.font = fontStr(z, z.size); c.fillStyle = z.color; c.textBaseline = "alphabetic"; c.textAlign = "left";
+  const m = c.measureText(z.text), abl = m.actualBoundingBoxLeft, abr = m.actualBoundingBoxRight;
+  const L = z.ink.l, R = z.ink.r;
+  const x = z.align === "left" ? L + abl : z.align === "right" ? R - abr : (L + R) / 2 - (abr - abl) / 2;
+  c.fillText(z.text, x, z.ink.base);
+  c.restore();
+  return [x - abl, x + abr];
+}
+async function preview() {
+  const z = sel; if (!z) return;
+  const id = ++pv;
+  try { await document.fonts.load(fontStr(z, z.size), z.text || "a"); } catch (e) {}
+  if (id !== pv || sel !== z) return;
+  ovc.clearRect(0, 0, ov.width, ov.height);
+  ovc.drawImage(z.patchCv, z.box.x, z.box.y);
+  drawText(ovc, z);
+}
+function edit(fn) { if (!sel) return; fn(sel); sel.dirty = true; $("szv").textContent = Math.round(sel.size * 10) / 10; preview(); }
+$("txt").oninput = e => edit(z => z.text = e.target.value);
+$("font").onchange = e => edit(z => { z.font = e.target.value; z.size = fitSize(z); $("sz").value = z.size; });
+$("bold").onchange = e => edit(z => { z.bold = e.target.checked; z.size = fitSize(z); $("sz").value = z.size; });
+$("ital").onchange = e => edit(z => { z.italic = e.target.checked; z.size = fitSize(z); $("sz").value = z.size; });
+$("col").oninput = e => edit(z => z.color = e.target.value);
+$("sz").oninput = e => edit(z => z.size = parseFloat(e.target.value));
+$("al").onchange = e => edit(z => z.align = e.target.value);
+$("auto").onclick = async () => {
+  if (!sel || busy) return; busy = true;
+  const z = sel; const keep = z.text;
+  z.text = z.orig; await applyAutoStyle(z); z.text = keep; fillPanel();
+  z.dirty = true; busy = false; setStatus("Police la plus proche choisie."); preview();
 };
 
-/* ---------- Doigt / souris sur l'image ---------- */
-function pos(e) {
-  const r = cv.getBoundingClientRect();
-  return { x: (e.clientX - r.left) * cv.width / r.width, y: (e.clientY - r.top) * cv.height / r.height };
+function pushHist() {
+  hist.push({ img: ctx.getImageData(0, 0, cv.width, cv.height), zones: zones.map(z => Object.assign({}, z)) });
+  if (hist.length > 6) hist.shift();
 }
-function toucheBloc(p) {
-  for (let i = blocs.length - 1; i >= 0; i--) {
-    const b = blocs[i];
-    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return i;
-  }
-  return -1;
+function commit() {
+  const z = sel; if (!z) return;
+  pushHist();
+  ctx.drawImage(z.patchCv, z.box.x, z.box.y);
+  const ext = drawText(ctx, z);
+  ovc.clearRect(0, 0, ov.width, ov.height);
+  const nx = Math.min(z.box.x, ext[0]), nr = Math.max(z.box.x + z.box.w, ext[1]);
+  z.x = nx; z.w = nr - nx; z.y = z.box.y; z.h = z.box.h;
+  z.orig = z.text; z.dirty = false;
+  sel = null; $("panel").hidden = true; renderZones(); enable();
+  setStatus("Modification appliquée. Tu peux en faire d’autres ou exporter.");
 }
-cv.addEventListener('pointerdown', e => {
-  if (!img || outil === 'main') return;
-  const p = pos(e);
-  if (outil === 'pipT' || outil === 'pipF') {
-    const d = sctx.getImageData(Math.floor(p.x), Math.floor(p.y), 1, 1).data, c = hex3(d[0], d[1], d[2]);
-    if (sel >= 0) { outil === 'pipT' ? regler('couleur', c) : (regler('fond', c), regler('mode', 'uni')); }
-    outil = 'zone'; majOutil(); return;
-  }
-  cv.setPointerCapture(e.pointerId);
-  const i = toucheBloc(p);
-  if (i >= 0) { sel = i; action = null; aFocaliser = true; }
-  else { sel = -1; action = { x0: p.x, y0: p.y, x: p.x, y: p.y, w: 0, h: 0 }; }
-  rafraichir();
-});
-cv.addEventListener('pointermove', e => {
-  if (!action) return;
-  const p = pos(e);
-  action.x = Math.min(action.x0, p.x); action.y = Math.min(action.y0, p.y);
-  action.w = Math.abs(p.x - action.x0); action.h = Math.abs(p.y - action.y0);
-  dessiner(true);
-});
-cv.addEventListener('pointerup', () => {
-  if (action && action.w > 8 && action.h > 8) {
-    pousserHisto();
-    const b = {
-      x: Math.round(action.x), y: Math.round(action.y), w: Math.round(action.w), h: Math.round(action.h),
-      mode: 'auto', fond: '#ffffff', texte: '', police: 'Arial', taille: 20, couleur: '#000000',
-      align: 'left', style: 'normal', ajuster: false, dx: 0, dy: 0, espacement: 0
-    };
-    reglagesAuto(b); blocs.push(b); sel = blocs.length - 1; aFocaliser = true;
-    astuce('Écris le nouveau texte directement dans la zone.');
-  }
-  action = null; rafraichir();
-  if (aFocaliser && sel >= 0) { ed.focus(); aFocaliser = false; }
-});
+$("apply").onclick = commit;
+$("close").onclick = closePanel;
+$("del").onclick = () => { zones = zones.filter(z => z !== sel); closePanel(); };
+$("undo").onclick = () => {
+  const h = hist.pop(); if (!h) return;
+  ctx.putImageData(h.img, 0, 0); zones = h.zones; closePanel(); enable();
+  setStatus("Dernière modification annulée.");
+};
+
+/* ---------- Zoom ---------- */
+function setZoom(v) { zoom = Math.min(5, Math.max(1, v)); stage.style.width = zoom * 100 + "%"; }
+$("zp").onclick = () => setZoom(zoom + .5);
+$("zm").onclick = () => setZoom(zoom - .5);
 
 /* ---------- Export ---------- */
-$('btnExport').onclick = () => $('dExport').showModal();
-$('fermerE').onclick = () => $('dExport').close();
-function telecharger(url, nom) {
-  const a = document.createElement('a'); a.href = url; a.download = nom;
+function save(blob, name) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
-function exporter(type, nom, q) {
-  if (!img) return alert("Choisis d'abord une image.");
-  dessiner(false); telecharger(cv.toDataURL(type, q), nom); dessiner(true); $('dExport').close();
-}
-$('btnPng').onclick = () => exporter('image/png', 'image-modifiee.png');
-$('btnJpg').onclick = () => exporter('image/jpeg', 'image-modifiee.jpg', 0.95);
-$('btnPdf').onclick = () => {
-  if (!img) return alert("Choisis d'abord une image.");
-  if (!window.jspdf) return alert("La bibliothèque PDF n'a pas pu se charger (connexion ?). Utilise PNG ou JPG.");
-  dessiner(false);
-  const w = cv.width, h = cv.height, pdf = new window.jspdf.jsPDF({ orientation: w > h ? 'l' : 'p', unit: 'px', format: [w, h], hotfixes: ['px_scaling'] });
-  pdf.addImage(cv.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, w, h); pdf.save('image-modifiee.pdf');
-  dessiner(true); $('dExport').close();
+function flush() { if (sel && sel.dirty) commit(); }
+$("png").onclick = () => { flush(); cv.toBlob(b => save(b, "image-modifiee.png"), "image/png"); };
+$("jpg").onclick = () => { flush(); cv.toBlob(b => save(b, "image-modifiee.jpg"), "image/jpeg", .95); };
+$("pdf").onclick = () => {
+  flush();
+  if (!window.jspdf) { setStatus("Connexion internet nécessaire pour créer le PDF."); return; }
+  const pdf = new window.jspdf.jsPDF({ orientation: cv.width > cv.height ? "l" : "p", unit: "px", format: [cv.width, cv.height], hotfixes: ["px_scaling"] });
+  pdf.addImage(cv.toDataURL("image/jpeg", .95), "JPEG", 0, 0, cv.width, cv.height);
+  pdf.save("image-modifiee.pdf");
 };
-$('btnJson').onclick = async () => {
-  const json = JSON.stringify(blocs.map(b => ({ x: b.x, y: b.y, w: b.w, h: b.h, mode: b.mode, fond: b.fond, texte: b.texte,
-    police: b.police, taille: b.taille, couleur: b.couleur, align: b.align, dx: b.dx, dy: b.dy })), null, 2);
-  try { await navigator.clipboard.writeText(json); alert('Zones copiées.'); } catch (e) { prompt('Copie ce texte :', json); }
-};
-majOutil(); astuce('Ouvre une image pour commencer.');
+enable();
 </script>
 </body>
 </html>
